@@ -3,37 +3,40 @@
 open Desif.Types
 open Spectre.Console
 
+// Shorthand for ignoring output
+let inline private (!!) x = x |> ignore
+
 let history (state: State) =
 
     let table = Table ()
 
-    table.AddColumn("FactId")     |> ignore
-    table.AddColumn("TimeStamp")  |> ignore
-    table.AddColumn("FactType")   |> ignore
-    table.AddColumn("Procedure")  |> ignore
-    table.AddColumn("Step")  |> ignore
+    !! table.AddColumn("FactId")
+    !! table.AddColumn("TimeStamp")
+    !! table.AddColumn("Procedure")
+    !! table.AddColumn("FactType")
+    !! table.AddColumn("Step")
 
     let facts = List.rev state.History
 
     for fact in facts do
         
         match fact.FactType with
-        | FactType.Allocated (p, a, r) -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "Allocated"; p.ToString(); ""|])
-        | FactType.AllocationRequested a -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "AllocatedRequested"; a.ProcedureId.ToString(); ""|])
-        | FactType.Freed (p, a, r) -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "Freed"; p.ToString(); ""|])
+        | FactType.Allocated (p, a, r) -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "Allocated"; ""|])
+        | FactType.AllocationRequested a -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); a.ProcedureId.ToString(); "AllocatedRequested"; ""|])
+        | FactType.Freed (p, a, r) -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "Freed"; ""|])
         | FactType.StepStarted (p, s, step) -> 
             match step.StepType with
-            | StepType.Allocate _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepStarted"; p.ToString(); "Allocate" |])
-            | StepType.Delay _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepStarted"; p.ToString(); "Delay" |])
-            | StepType.Free _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepStarted"; p.ToString(); "Free" |])
+            | StepType.Allocate _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepStarted"; "Allocate" |])
+            | StepType.Delay _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepStarted"; "Delay" |])
+            | StepType.Free _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepStarted"; "Free" |])
         | FactType.StepCompleted (p, s, step) -> 
             match step.StepType with
-            | StepType.Allocate _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepCompleted"; p.ToString(); "Allocate" |])
-            | StepType.Delay _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepCompleted"; p.ToString(); "Delay" |])
-            | StepType.Free _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "StepCompleted"; p.ToString(); "Free" |])
-        | FactType.ProcedureStarted p -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "ProcedureStarted"; p.ToString(); ""|])
-        | FactType.ProcedureCompleted p -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); "ProcedureCompleted"; p.ToString(); ""|])
+            | StepType.Allocate _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepCompleted"; "Allocate" |])
+            | StepType.Delay _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepCompleted"; "Delay" |])
+            | StepType.Free _ -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "StepCompleted"; "Free" |])
+        | FactType.ProcedureStarted p -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "ProcedureStarted"; ""|])
+        | FactType.ProcedureCompleted p -> table.AddRow([|fact.FactId.ToString(); fact.TimeStamp.ToString(); p.ToString(); "ProcedureCompleted"; ""|])
         |> ignore
 
 
-    AnsiConsole.Render(table)
+    !! AnsiConsole.Render(table)

@@ -236,7 +236,8 @@ module State =
                 else
                     let nextPossibilityId, modelState = nextPossibilityId modelState
                     let nextPossibility = Possibility.create nextPossibilityId nextTime generator.PossibilityType
-                    addPossibility nextPossibility modelState
+                    let newState = addPossibility nextPossibility modelState
+                    add nextTime maxTime newState generator
 
             let modelState =
                 (modelState, generators)
