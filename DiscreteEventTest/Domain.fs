@@ -316,9 +316,9 @@ module Simulation =
         let handle (next: Possibility) (modelState: ModelState) : ModelState =
             let m = { modelState with Now = next.TimeStamp }
             match next.PossibilityType with
-            | PlanArrival plan -> 
+            | PossibilityType.PlanArrival plan -> 
                 planArrival plan m
-            | Delay (procedureId, stateId) -> 
+            | PossibilityType.Delay (procedureId, stateId) -> 
                 delay procedureId stateId modelState
             |> removePossibility next
         
@@ -328,7 +328,7 @@ module Simulation =
             let matchingResources = Set.intersect m.FreeResources r.Resources
 
             match matchingResources.Count >= r.Quantity with
-            | false -> Failure r
+            | false -> AllocationResult.Failure r
             | true ->
                 let toAllocate =
                     matchingResources
@@ -337,7 +337,7 @@ module Simulation =
                 let newAllocation = Allocation.create r.AllocationId r.Quantity toAllocate
                 ModelState.addAllocation r.ProcedureId newAllocation m
                 |> ModelState.addInstant (InstantType.Increment r.ProcedureId)
-                |> Success
+                |> AllocationResult.Success
                 
 
     let rec runInstantPhase (m: ModelState) =
@@ -363,8 +363,8 @@ module Simulation =
             | [] -> ModelState.setOpenRequests (Set unfulfilled) m
             | next::remaining ->
                 match Allocate.tryAllocate next m with
-                | Success newState -> processAllocations unfulfilled remaining newState
-                | Failure ar -> processAllocations (ar::unfulfilled) remaining m
+                | AllocationResult.Success newState -> processAllocations unfulfilled remaining newState
+                | AllocationResult.Failure ar -> processAllocations (ar::unfulfilled) remaining m
 
         processAllocations [] requests m
 
@@ -389,12 +389,12 @@ module Simulation =
         match ModelState.nextPossibility m with
         | Some possibility ->
             if possibility.TimeStamp > maxTime then
-                Complete { m with Now = maxTime }
+                SimulationState.Complete { m with Now = maxTime }
             else
                 Possibility.handle possibility m
-                |> Processing
+                |> SimulationState.Processing
         | None ->
-            Complete { m with Now = maxTime }
+            SimulationState.Complete { m with Now = maxTime }
 
     let rec run (maxTime: TimeStamp) (m: ModelState) =
 
@@ -402,8 +402,8 @@ module Simulation =
             runPhase m
             |> step maxTime
         match r with
-        | Processing newState -> run maxTime newState
-        | Complete newState -> newState
+        | SimulationState.Processing newState -> run maxTime newState
+        | SimulationState.Complete newState -> newState
 
 
 module Planning =

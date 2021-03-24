@@ -19,6 +19,7 @@ type Model = {
 }
 
 type StateId = StateId of int64
+
 type TimeStamp = TimeStamp of float
 
 type TimeSpan = TimeSpan of float
@@ -74,6 +75,7 @@ type ProcedureState = {
 
 type InstantId = InstantId of int64
 
+[<RequireQualifiedAccess>]
 type InstantType =
     | Free of procedureId: ProcedureId * allocationId: AllocationId
     | Increment of ProcedureId
@@ -86,6 +88,7 @@ type Instant = {
 
 type PossibilityId = PossibilityId of int64
 
+[<RequireQualifiedAccess>]
 type PossibilityType = 
     | Delay of procedureId: ProcedureId * stateId: StateId
     | PlanArrival of plan: Plan
@@ -119,10 +122,12 @@ type ModelState = {
     OpenRequests : Set<AllocationRequest>
 }
 
+[<RequireQualifiedAccess>]
 type AllocationResult =
     | Success of modelState: ModelState
     | Failure of allocationRequest: AllocationRequest
 
+[<RequireQualifiedAccess>]
 type SimulationState =
     | Complete of modelState: ModelState
     | Processing of modelState: ModelState
