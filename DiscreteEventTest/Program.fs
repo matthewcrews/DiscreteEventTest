@@ -34,5 +34,5 @@ let main argv =
     let maxTime = TimeStamp 10.0
     
     let r = Simulation.run maxTime m
-
+    printfn "%A" (List.rev r.History)
     0 // return an integer exit code

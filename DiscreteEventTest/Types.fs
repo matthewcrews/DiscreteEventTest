@@ -33,10 +33,10 @@ type TimeSpan = TimeSpan of float
 
 type Resource = Resource of string
 
-[<RequireQualifiedAccess>]
-type Availability =
-    | Free
-    | Allocated of allocationId:AllocationId
+//[<RequireQualifiedAccess>]
+//type Availability =
+//    | Free
+//    | Allocated of allocationId:AllocationId
 
 type AllocationId = AllocationId of int64
 
@@ -109,25 +109,46 @@ type AllocationRequest = {
     Resources : Set<Resource>
 }
 
-type ModelState = {
+type FactId = FactId of int64
+
+[<RequireQualifiedAccess>]
+type FactType =
+    | AllocationRequested of allocationRequest:AllocationRequest
+    | Allocated of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
+    | Freed of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
+    | StepStarted of procedureId:ProcedureId * stateId:StateId * step:Step
+    | StepCompleted of procedureId:ProcedureId * stateId:StateId * step:Step
+    | ProcedureStarted of procedureId:ProcedureId
+    | ProcedureCompleted of procedureId:ProcedureId
+
+type Fact = {
+    FactId : FactId
+    TimeStamp : TimeStamp
+    FactType : FactType
+}
+
+type State = {
     Now : TimeStamp
+    LastFactId : FactId
     LastPossibilityId : PossibilityId
     LastProcedureId : ProcedureId
     LastInstantId : InstantId
     FreeResources : Set<Resource>
     Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
+    Assignments : Map<Resource, ProcedureId * AllocationId>
     ProcedureStates : Map<ProcedureId, ProcedureState>
     Instants : Set<Instant>
     Possibilities : Set<Possibility>
     OpenRequests : Set<AllocationRequest>
+    History : Fact list
 }
 
 [<RequireQualifiedAccess>]
 type AllocationResult =
-    | Success of modelState: ModelState
+    | Success of modelState: State
     | Failure of allocationRequest: AllocationRequest
 
 [<RequireQualifiedAccess>]
 type SimulationState =
-    | Complete of modelState: ModelState
-    | Processing of modelState: ModelState
+    | Complete of modelState: State
+    | Processing of modelState: State
