@@ -361,7 +361,6 @@ module State =
 
 
     let private processStep (next: Step) (procedureState: ProcedureState) (state: State) =
-        failwith "Not implemented"
         state |>
         match next.StepType with
         | StepType.Allocate (allocationId, quantity, resources) ->
@@ -385,8 +384,8 @@ module State =
 
           state
           |> setProcedureState newProcedureState
-          |> processStep nextStep newProcedureState
           |> addFact (FactType.stepStarted procedureState.ProcedureId procedureState.StateId nextStep)
+          |> processStep nextStep newProcedureState
 
 
     let resume (procedureId: ProcedureId) (state: State) =
@@ -411,11 +410,11 @@ module Simulation =
             |> addInstant (InstantType.resume procedureId)
 
 
-        let handle (i: Instant) (state: State) =
-            match i.InstantType with
+        let handle (instant: Instant) (state: State) =
+            match instant.InstantType with
             | InstantType.Free (procedureId, allocationId) -> free procedureId allocationId state
             | InstantType.Resume procedureId -> State.resume procedureId state
-            |> removeInstant i
+            |> removeInstant instant
 
 
     module Possibility =
