@@ -270,11 +270,11 @@ module State =
             |> Some
 
 
-    let nextInstant (m: State) =
-        match m.Instants.IsEmpty with
+    let nextInstant (state: State) =
+        match state.Instants.IsEmpty with
         | true -> None
         | false ->
-            m.Instants
+            state.Instants
             |> Seq.sortBy (fun x -> x.InstantId)
             |> Seq.head
             |> Some
@@ -284,20 +284,20 @@ module State =
         { state with ProcedureStates = Map.add procedureState.ProcedureId procedureState state.ProcedureStates }
 
 
-    let addInstant instantType (m: State) =
-        let nextInstantId = InstantId.next m.LastInstantId
+    let addInstant instantType (state: State) =
+        let nextInstantId = InstantId.next state.LastInstantId
         let nextInstant = Instant.create nextInstantId instantType
-        { m with 
+        { state with 
             LastInstantId = nextInstantId
-            Instants = Set.add nextInstant m.Instants
+            Instants = Set.add nextInstant state.Instants
         }
 
-    let removeInstant (i: Instant) (m: State) =
-        { m with Instants = Set.remove i m.Instants }
+    let removeInstant (i: Instant) (state: State) =
+        { state with Instants = Set.remove i state.Instants }
 
 
-    let addAllocationRequest (a: AllocationRequest) (m: State) =
-        { m with OpenRequests = Set.add a m.OpenRequests }
+    let addAllocationRequest (a: AllocationRequest) (state: State) =
+        { state with OpenRequests = Set.add a state.OpenRequests }
         |> addFact (FactType.allocationRequested a)
 
 
@@ -411,10 +411,10 @@ module Simulation =
             |> addInstant (InstantType.resume procedureId)
 
 
-        let handle (i: Instant) (m: State) =
+        let handle (i: Instant) (state: State) =
             match i.InstantType with
-            | InstantType.Free (procedureId, allocationId) -> free procedureId allocationId m
-            | InstantType.Resume procedureId -> State.resume procedureId m
+            | InstantType.Free (procedureId, allocationId) -> free procedureId allocationId state
+            | InstantType.Resume procedureId -> State.resume procedureId state
             |> removeInstant i
 
 
@@ -424,13 +424,13 @@ module Simulation =
             startProcedure plan modelState
 
 
-        let private delay (procedureId: ProcedureId) (stateId: StateId) (m: State) =
-            let p = m.ProcedureStates.[procedureId]
+        let private delay (procedureId: ProcedureId) (stateId: StateId) (state: State) =
+            let p = state.ProcedureStates.[procedureId]
 
             if p.StateId = stateId then
-                addInstant (InstantType.resume procedureId) m
+                addInstant (InstantType.resume procedureId) state
             else
-                m
+                state
 
 
         let handle (next: Possibility) (state: State) : State =
@@ -444,8 +444,8 @@ module Simulation =
 
     module Allocate =
 
-        let tryAllocate (r: AllocationRequest) (m: State) : AllocationResult =
-            let matchingResources = Set.intersect m.FreeResources r.Resources
+        let tryAllocate (r: AllocationRequest) (state: State) : AllocationResult =
+            let matchingResources = Set.intersect state.FreeResources r.Resources
 
             match matchingResources.Count >= r.Quantity with
             | false -> AllocationResult.Failure r
@@ -455,19 +455,19 @@ module Simulation =
                     |> Seq.take r.Quantity
                     |> Set
                 let newAllocation = Allocation.create r.AllocationId r.Quantity toAllocate
-                State.addAllocation r.ProcedureId newAllocation m
+                State.addAllocation r.ProcedureId newAllocation state
                 |> State.addInstant (InstantType.resume r.ProcedureId)
                 |> AllocationResult.Success
 
 
-    let rec runInstantPhase (m: State) =
+    let rec runInstantPhase (state: State) =
         
-        match State.nextInstant m with
+        match State.nextInstant state with
         | Some i ->
-            Instant.handle i m
+            Instant.handle i state
             |> runInstantPhase
         | None ->
-            m
+            state
 
 
     let private prioritizeAllocationRequests (state: State) =
@@ -482,13 +482,13 @@ module Simulation =
     let runAllocationPhase (state: State) =
         let prioritizedRequests = prioritizeAllocationRequests state
 
-        let rec processAllocations (unfulfilled: AllocationRequest list) (requests: AllocationRequest list) (m: State) : State =
+        let rec processAllocations (unfulfilled: AllocationRequest list) (requests: AllocationRequest list) (state: State) : State =
             match requests with
-            | [] -> State.setOpenRequests (Set unfulfilled) m
+            | [] -> State.setOpenRequests (Set unfulfilled) state
             | next::remaining ->
-                match Allocate.tryAllocate next m with
+                match Allocate.tryAllocate next state with
                 | AllocationResult.Success newState -> processAllocations unfulfilled remaining newState
-                | AllocationResult.Failure ar -> processAllocations (ar::unfulfilled) remaining m
+                | AllocationResult.Failure ar -> processAllocations (ar::unfulfilled) remaining state
 
         processAllocations [] prioritizedRequests state
 
