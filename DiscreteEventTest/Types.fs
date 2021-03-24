@@ -21,6 +21,10 @@ type Model = {
 type StateId = StateId of int64
 
 type TimeStamp = TimeStamp of float
+    with
+
+    static member (-) (TimeStamp t1, TimeStamp t2) =
+        TimeSpan (t1 - t2)
 
 type TimeSpan = TimeSpan of float
     with
@@ -33,11 +37,6 @@ type TimeSpan = TimeSpan of float
 
 type Resource = Resource of string
 
-//[<RequireQualifiedAccess>]
-//type Availability =
-//    | Free
-//    | Allocated of allocationId:AllocationId
-
 type AllocationId = AllocationId of int64
 
 type Allocation = {
@@ -49,8 +48,10 @@ type Allocation = {
 [<RequireQualifiedAccess>]
 type StepType =
     | Allocate of allocationId: AllocationId * quantity: int * resources: Set<Resource>
-    | Free of allocationId: AllocationId
     | Delay of timeSpan: TimeSpan
+    | Free of allocationId: AllocationId
+    | Fail of resource: Resource * timeTo: TimeSpan
+    | Restore of resource: Resource
     //| Move of item: ItemId * location: Location
     // | Open of flow: Flow * flowDescription: FlowDescription
     // | Close of flow: Flow
@@ -66,11 +67,18 @@ type Plan = Plan of Step list
 
 type ProcedureId = ProcedureId of int64
 
-type ProcedureState = {
+[<RequireQualifiedAccess>]
+type ProcedureState =
+    | Running
+    | WaitingFor of completion: Completion
+    | Suspended of suspendedAt: TimeStamp * waitingFor: Completion * suspendedFor: Set<Resource>
+
+type Procedure = {
     ProcedureId : ProcedureId
     StateId : StateId
     Processed : Step list
     Pending : Step list
+    ProcedureState : ProcedureState
 }
 
 type InstantId = InstantId of int64
@@ -78,25 +86,36 @@ type InstantId = InstantId of int64
 [<RequireQualifiedAccess>]
 type InstantType =
     | Free of procedureId: ProcedureId * allocationId: AllocationId
-    //| Increment of ProcedureId
-    | Resume of ProcedureId
+    | Proceed of procedureId: ProcedureId
+    //| AttemptResume of procedureId: ProcedureId
+    | Restore of resource: Resource
+    | HandleFailure of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId
+    | HandleRestore of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId
 
 type Instant = {
     InstantId : InstantId
     InstantType : InstantType
 }
 
+type Completion = {
+    ProcedureId : ProcedureId
+    StepId : StepId
+    StateId : StateId
+    CompletionTimeStamp : TimeStamp
+}
+
 type PossibilityId = PossibilityId of int64
 
 [<RequireQualifiedAccess>]
 type PossibilityType = 
-    | Delay of procedureId: ProcedureId * stateId: StateId
+    | Completion of completion: Completion
     | PlanArrival of plan: Plan
+    | Failure of resource: Resource
 
 type Possibility =
     {
         PossibilityId : PossibilityId
-        TimeStamp : TimeStamp
+        ArrivalTimeStamp : TimeStamp
         PossibilityType : PossibilityType
     }
 
@@ -120,6 +139,10 @@ type FactType =
     | StepCompleted of procedureId:ProcedureId * stateId:StateId * step:Step
     | ProcedureStarted of procedureId:ProcedureId
     | ProcedureCompleted of procedureId:ProcedureId
+    | Failed of resource:Resource
+    | Restored of resource:Resource
+    | Suspended of procedureId:ProcedureId
+    | Resumed of procedureId:ProcedureId
 
 type Fact = {
     FactId : FactId
@@ -133,10 +156,11 @@ type State = {
     LastPossibilityId : PossibilityId
     LastProcedureId : ProcedureId
     LastInstantId : InstantId
-    FreeResources : Set<Resource>
+    Free : Set<Resource>
+    Down : Set<Resource>
     Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
     Assignments : Map<Resource, ProcedureId * AllocationId>
-    ProcedureStates : Map<ProcedureId, ProcedureState>
+    Procedures : Map<ProcedureId, Procedure>
     Instants : Set<Instant>
     Possibilities : Set<Possibility>
     OpenRequests : Set<AllocationRequest>

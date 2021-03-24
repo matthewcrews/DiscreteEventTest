@@ -5,6 +5,10 @@
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <WarningsAsErrors>3239;0025;</WarningsAsErrors>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Types.fs" />
     <Compile Include="Domain.fs" />

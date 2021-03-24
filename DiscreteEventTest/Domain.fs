@@ -65,17 +65,30 @@ module ProcedureId =
 
 
 module ProcedureState =
+
+    let running =
+        ProcedureState.Running
+
+    let waiting completion =
+        ProcedureState.WaitingFor completion
+
+    let suspended suspendedAt remainingTime suspendedFor =
+        ProcedureState.Suspended (suspendedAt, remainingTime, suspendedFor)
+
+
+module Procedure =
     
-    let create procedureId stateId pending processed =
+    let create procedureId stateId pending processed procedureState =
         {
           ProcedureId = procedureId
           StateId = stateId
           Pending = pending
           Processed = processed
+          ProcedureState = procedureState
         }
 
     let ofPlan procedureId (Plan steps) =
-        create procedureId (StateId 0L) steps []
+        create procedureId (StateId 0L) steps [] ProcedureState.running
 
 
 module StateId =
@@ -95,8 +108,18 @@ module InstantType =
     let free procedureId allocationId =
         InstantType.Free (procedureId, allocationId)
 
-    let resume procedureId =
-        InstantType.Resume procedureId
+    let proceed procedureId =
+        InstantType.Proceed procedureId
+
+    let handleFailure resource procedureId allocationId =
+        InstantType.HandleFailure (resource, procedureId, allocationId)
+
+    let handleRestore resource procedureId allocationId =
+        InstantType.HandleRestore (resource, procedureId, allocationId)
+
+    let restore resource =
+        InstantType.Restore resource
+
 
 module Instant =
 
@@ -113,19 +136,25 @@ module PossibilityId =
         PossibilityId (lastPossibilityId + 1L)
 
 
+module PossibilityType =
+
+    let failure resource =
+        PossibilityType.Failure resource
+
+
 module Possibility =
     
     let create possibilityId timeStamp possibilityType =
         {
             PossibilityId = possibilityId
-            TimeStamp = timeStamp
+            ArrivalTimeStamp = timeStamp
             PossibilityType = possibilityType
         }
 
 
 module AllocationRequest =
 
-    let create timeStamp (procedure: ProcedureState) (allocation: Allocation) =
+    let create timeStamp (procedure: Procedure) (allocation: Allocation) =
         {
             RequestTimeStamp = timeStamp
             ProcedureId = procedure.ProcedureId
@@ -165,6 +194,18 @@ module FactType =
     let procedureCompleted procedureId =
         FactType.ProcedureCompleted procedureId
 
+    let failed resource =
+        FactType.Failed resource
+
+    let restored resource =
+        FactType.Restored resource
+
+    let suspended procedureId =
+        FactType.Suspended procedureId
+
+    let resumed procedureId =
+        FactType.Resumed procedureId
+
 
 module Fact =
 
@@ -177,6 +218,7 @@ module Fact =
 
 
 /// Functions for transforming the state. They also track the History
+[<RequireQualifiedAccess>]
 module State =
 
     let initial =
@@ -186,10 +228,11 @@ module State =
             LastPossibilityId = PossibilityId 0L
             LastProcedureId = ProcedureId 0L
             LastInstantId = InstantId 0L
-            FreeResources = Set.empty
+            Free = Set.empty
+            Down = Set.empty
             Allocations = Map.empty
             Assignments = Map.empty
-            ProcedureStates = Map.empty
+            Procedures = Map.empty
             Instants = Set.empty
             Possibilities = Set.empty
             OpenRequests = Set.empty
@@ -246,12 +289,14 @@ module State =
             modelState
 
 
-        let private addResources resources modelState : State =
+        let private addResources resources state : State =
 
             let add modelState resource =
-                { modelState with FreeResources = Set.add resource modelState.FreeResources }
+                { modelState with 
+                    Free = Set.add resource state.Free
+                }
         
-            (modelState, resources)
+            (state, resources)
             ||> Seq.fold add
 
         let initialize (maxTime: TimeStamp) (model: Model) =
@@ -266,7 +311,7 @@ module State =
         | true -> None
         | false -> 
             modelState.Possibilities
-            |> Seq.sortBy (fun x -> x.TimeStamp, x.PossibilityId)
+            |> Seq.sortBy (fun x -> x.ArrivalTimeStamp, x.PossibilityId)
             |> Seq.head
             |> Some
 
@@ -281,8 +326,8 @@ module State =
             |> Some
 
 
-    let private setProcedureState (procedureState: ProcedureState) (state: State) =
-        { state with ProcedureStates = Map.add procedureState.ProcedureId procedureState state.ProcedureStates }
+    let private setProcedureState (procedureState: Procedure) (state: State) =
+        { state with Procedures = Map.add procedureState.ProcedureId procedureState state.Procedures }
 
 
     let addInstant instantType (state: State) =
@@ -318,20 +363,20 @@ module State =
 
     let startProcedure plan (state: State) =
         let nextProcedureId = ProcedureId.next state.LastProcedureId
-        let p = ProcedureState.ofPlan nextProcedureId plan
+        let p = Procedure.ofPlan nextProcedureId plan
         { state with
             LastProcedureId = nextProcedureId
-            ProcedureStates = Map.add nextProcedureId p state.ProcedureStates
+            Procedures = Map.add nextProcedureId p state.Procedures
         }
         |> addFact (FactType.procedureStarted nextProcedureId)
-        |> addInstant (InstantType.resume nextProcedureId)
+        |> addInstant (InstantType.proceed nextProcedureId)
 
 
     let addAllocation procedureId (a: Allocation) (state: State) =
-        let newFreeResources = state.FreeResources - a.Resources
+        let newFreeResources = state.Free - a.Resources
         let newAllocations = Map.add (procedureId, a.AllocationId) a.Resources state.Allocations
         { state with
-            FreeResources = newFreeResources
+            Free = newFreeResources
             Allocations = newAllocations
         }
         |> addFact (FactType.allocated procedureId a.AllocationId a.Resources)
@@ -346,13 +391,14 @@ module State =
     let freeAllocation (procedureId: ProcedureId) (allocationId: AllocationId) (state: State) =
         let resources = state.Allocations.[procedureId, allocationId]
         { state with
-            FreeResources = resources + state.FreeResources
+            Free = resources + state.Free
             Allocations = Map.remove (procedureId, allocationId) state.Allocations
         }
         |> addFact (FactType.freed procedureId allocationId resources)
+        |> addInstant (InstantType.proceed procedureId)
 
 
-    let private finishPreviousStep (procedureState: ProcedureState) (state: State) =
+    let private finishPreviousStep (procedureState: Procedure) (state: State) =
         match procedureState.Processed with
         | [] -> procedureState, state
         | last::previous ->
@@ -361,7 +407,7 @@ module State =
             |> (fun x -> procedureState, x)
 
 
-    let private processStep (next: Step) (procedureState: ProcedureState) (state: State) =
+    let private processStep (next: Step) (procedureState: Procedure) (state: State) =
         state |>
         match next.StepType with
         | StepType.Allocate (allocationId, quantity, resources) ->
@@ -369,19 +415,31 @@ module State =
             let request = AllocationRequest.create state.Now procedureState allocation
             addAllocationRequest request
         | StepType.Delay timeSpan ->
-            addPossibility timeSpan (PossibilityType.Delay (procedureState.ProcedureId, procedureState.StateId))
+            let completion =
+                {
+                    ProcedureId = procedureState.ProcedureId
+                    StateId = procedureState.StateId
+                    StepId = next.StepId
+                    CompletionTimeStamp = state.Now + timeSpan
+                }
+            addPossibility timeSpan (PossibilityType.Completion completion)
         | StepType.Free allocationId ->
             addInstant (InstantType.free procedureState.ProcedureId allocationId)
+        | StepType.Fail (resource, timeTo) ->
+            addPossibility timeTo (PossibilityType.failure resource)
+        | StepType.Restore resource ->
+            addInstant (InstantType.restore resource)
         
 
-    let private startNextStep (procedureState: ProcedureState) (state: State) =
+    let private startNextStep (procedureState: Procedure) (state: State) =
         match procedureState.Pending with
         | [] ->
             state
             |> addFact (FactType.procedureCompleted procedureState.ProcedureId)
         | nextStep::remainingSteps ->
           let nextStateId = StateId.next procedureState.StateId
-          let newProcedureState = ProcedureState.create procedureState.ProcedureId nextStateId remainingSteps (nextStep::procedureState.Processed)
+          let newProcedureState = 
+              Procedure.create procedureState.ProcedureId nextStateId remainingSteps (nextStep::remainingSteps) (ProcedureState.Running)
 
           state
           |> setProcedureState newProcedureState
@@ -389,46 +447,159 @@ module State =
           |> processStep nextStep newProcedureState
 
 
-    let resume (procedureId: ProcedureId) (state: State) =
-        let procedureState = state.ProcedureStates.[procedureId]
+    let proceed (procedureId: ProcedureId) (state: State) =
+        let procedureState = state.Procedures.[procedureId]
 
         (procedureState, state)
         ||> finishPreviousStep
         ||> startNextStep
 
 
+    let private addHandleFailure resource state =
+        match Map.tryFind resource state.Assignments with
+        | Some (procedureId, allocationId) ->
+            state
+            |> addInstant (InstantType.handleFailure resource procedureId allocationId)
+        | None ->
+            state
+
+
+    let private addHandleRestore resource state =
+        match Map.tryFind resource state.Assignments with
+        | Some (procedureId, allocationId) ->
+            state
+            |> addInstant (InstantType.handleRestore resource procedureId allocationId)
+        | None ->
+            state
+
+
+    let private addResourceToDown (resource: Resource) (state: State) =
+      let newDown = Set.add resource state.Down
+      { state with Down = newDown }
+
+
+    let private removeResourceFromDown (resource: Resource) (state: State) =
+      let newDown = Set.remove resource state.Down
+      { state with Down = newDown }
+
+
+    let failResource (resource: Resource) (state: State) =
+        state
+        |> addResourceToDown resource
+        |> addFact (FactType.failed resource)
+        |> addHandleFailure resource
+
+
+    let restoreResource (resource: Resource) (state: State) =
+        state
+        |> removeResourceFromDown resource
+        |> addFact (FactType.restored resource)
+        |> addHandleRestore resource
+        
+
+    let handleFailure resource procedureId allocationId state =
+        let procedure = state.Procedures.[procedureId]
+
+        // NOTE: In the future we want more complex failure handling. For now
+        // we are just going to have Pause/Resume behavior
+
+        match procedure.ProcedureState with
+        | ProcedureState.Running ->
+            // Kind of strange if this happened ?
+            state
+        | ProcedureState.WaitingFor possibility ->
+            let nextStateId = StateId.next procedure.StateId
+            let newProcedureState = ProcedureState.Suspended (state.Now, possibility, Set [resource])
+            let newProcedure = 
+                { procedure with
+                    StateId = nextStateId
+                    ProcedureState = newProcedureState 
+                }
+            setProcedureState newProcedure state
+
+        | ProcedureState.Suspended (suspendedAt, waitingFor, suspendedFor) ->
+            let newProcedureState = ProcedureState.Suspended (suspendedAt, waitingFor, Set.add resource suspendedFor)
+            let nextStateId = StateId.next procedure.StateId
+            let newProcedure = 
+                { procedure with
+                    StateId = nextStateId
+                    ProcedureState = newProcedureState 
+                }
+            setProcedureState newProcedure state
+
+    let handleRestore resource procedureId allocationId state =
+        let procedure = state.Procedures.[procedureId]
+
+        match procedure.ProcedureState with
+        | ProcedureState.Running
+        | ProcedureState.WaitingFor _ ->
+            // The procedure likely no longer needs the resource that was freed
+            state
+
+        | ProcedureState.Suspended (suspendedAt, completion, suspendedFor) ->
+            let newSuspendedFor = Set.remove resource suspendedFor
+
+            match Set.isEmpty newSuspendedFor with
+            | true ->
+                // We can resume
+                let newDelay = (completion.CompletionTimeStamp - suspendedAt)
+                let newCompletion = 
+                    { completion with 
+                        CompletionTimeStamp = state.Now + newDelay
+                        StateId = procedure.StateId
+                    }
+
+                let newProcedure = 
+                    { procedure with
+                        ProcedureState = ProcedureState.running
+                    }
+
+                state
+                |> setProcedureState newProcedure // TODO: Clean up this wording
+                |> addPossibility newDelay (PossibilityType.Completion newCompletion)
+            | false ->
+                let newProcedure = 
+                    { procedure with
+                        ProcedureState = ProcedureState.Suspended (suspendedAt, completion, newSuspendedFor)
+                    }
+
+                state
+                |> setProcedureState newProcedure // TODO: Clean up this wording
+                
+
+
 module Simulation =
 
     /// NOTE: We do not report Facts in this section. That is all handled by the State module.
     /// This is reserved for "business logic"
-    open State
 
     module Instant =
 
-        let private free (procedureId: ProcedureId) (allocationId: AllocationId) (state: State) =
-            state
-            |> State.freeAllocation procedureId allocationId
-            |> addInstant (InstantType.resume procedureId)
-
-
         let handle (instant: Instant) (state: State) =
             match instant.InstantType with
-            | InstantType.Free (procedureId, allocationId) -> free procedureId allocationId state
-            | InstantType.Resume procedureId -> State.resume procedureId state
-            |> removeInstant instant
+            | InstantType.Free (procedureId, allocationId) -> 
+                State.freeAllocation procedureId allocationId state
+            | InstantType.Proceed procedureId ->
+                State.proceed procedureId state
 
+            | InstantType.Restore resource ->
+                State.restoreResource resource state
+            | InstantType.HandleFailure (resource, procedureId, allocationId) ->
+                State.handleFailure resource procedureId allocationId state
+            | InstantType.HandleRestore (resource, procedureId, allocationId) ->
+                State.handleRestore resource procedureId allocationId state
 
     module Possibility =
 
         let private planArrival plan (modelState: State) =
-            startProcedure plan modelState
+            State.startProcedure plan modelState
 
 
         let private delay (procedureId: ProcedureId) (stateId: StateId) (state: State) =
-            let p = state.ProcedureStates.[procedureId]
+            let p = state.Procedures.[procedureId]
 
             if p.StateId = stateId then
-                addInstant (InstantType.resume procedureId) state
+                State.addInstant (InstantType.proceed procedureId) state
             else
                 state
 
@@ -437,15 +608,15 @@ module Simulation =
             match next.PossibilityType with
             | PossibilityType.PlanArrival plan -> 
                 planArrival plan state
-            | PossibilityType.Delay (procedureId, stateId) -> 
+            | PossibilityType.Completion completion -> 
                 delay procedureId stateId state
-            |> removePossibility next
+            |> State.removePossibility next
         
 
     module Allocate =
 
         let tryAllocate (r: AllocationRequest) (state: State) : AllocationResult =
-            let matchingResources = Set.intersect state.FreeResources r.Resources
+            let matchingResources = Set.intersect state.Free r.Resources
 
             match matchingResources.Count >= r.Quantity with
             | false -> AllocationResult.Failure r
@@ -456,7 +627,7 @@ module Simulation =
                     |> Set
                 let newAllocation = Allocation.create r.AllocationId r.Quantity toAllocate
                 State.addAllocation r.ProcedureId newAllocation state
-                |> State.addInstant (InstantType.resume r.ProcedureId)
+                |> State.addInstant (InstantType.proceed r.ProcedureId)
                 |> AllocationResult.Success
 
 
@@ -500,12 +671,11 @@ module Simulation =
         match State.nextInstant state with
         | Some i ->
             Instant.handle i state
-            |> immediatePhase
-        | None ->
+            |> ArrivalTimeStamp   | None ->
             let prevOpenRequests = state.OpenRequests
             let newState = runAllocationPhase state
-            // If allocations have occured, we want to re-run the Instants
-            if prevOpenRequests <> newState.OpenRequests then
+            // If new Instants aArrivalTimeStampeed to process them
+            if not (Set.isEmpty newState.Instants) then
                 immediatePhase newState
             else
                 newState
