@@ -179,6 +179,9 @@ module State =
             History = []
         }
         
+    let setNow (now: TimeStamp) (state: State) =
+        { state with Now = now }
+
     let addFact (factType: FactType) (state: State) =
         let nextFactId = FactId.next state.LastFactId
         let fact = Fact.create nextFactId state.Now factType
@@ -347,7 +350,7 @@ module State =
             state
             |> reportStepCompletion procedureState
             |> setProcedureState procedureId newProcedureState
-            |> addFact (FactType.stepStarted procedureId nextStateId next)
+            //|> addFact (FactType.stepStarted procedureId nextStateId next)
 
 
 module Simulation =
@@ -377,16 +380,18 @@ module Simulation =
                 // Should report an empty plan
                 state
             | next::remaining ->
-                match next.StepType with
-                | StepType.Allocate (allocationId, quantity, resources) ->
-                    let allocation = Allocation.create allocationId quantity resources
-                    let request = AllocationRequest.create state.Now procedureState allocation
-                    addAllocationRequest request state
-                    // TODO: Allocation requested fact
-                | StepType.Delay s ->
-                    addPossibility s (PossibilityType.Delay (procedureState.ProcedureId, procedureState.StateId)) state
-                | StepType.Free allocationId ->
-                    addInstant (InstantType.Free (procedureId, allocationId)) state
+                state
+                |> addFact (FactType.stepStarted procedureId procedureState.StateId next)
+                |>  match next.StepType with
+                    | StepType.Allocate (allocationId, quantity, resources) ->
+                        let allocation = Allocation.create allocationId quantity resources
+                        let request = AllocationRequest.create state.Now procedureState allocation
+                        addAllocationRequest request
+                        // TODO: Allocation requested fact
+                    | StepType.Delay timeSpan ->
+                        addPossibility timeSpan (PossibilityType.Delay (procedureState.ProcedureId, procedureState.StateId))
+                    | StepType.Free allocationId ->
+                        addInstant (InstantType.Free (procedureId, allocationId))
 
         let handle (i: Instant) (m: State) =
             match i.InstantType with
@@ -409,13 +414,12 @@ module Simulation =
             else
                 m
 
-        let handle (next: Possibility) (modelState: State) : State =
-            let m = { modelState with Now = next.TimeStamp }
+        let handle (next: Possibility) (state: State) : State =
             match next.PossibilityType with
             | PossibilityType.PlanArrival plan -> 
-                planArrival plan m
+                planArrival plan state
             | PossibilityType.Delay (procedureId, stateId) -> 
-                delay procedureId stateId modelState
+                delay procedureId stateId state
             |> removePossibility next
         
     module Allocate =
@@ -484,17 +488,19 @@ module Simulation =
 
 
     /// This is when we take a step forward in time and process the next Possibility
-    let timeStepPhase (maxTime: TimeStamp) (m: State) =
+    let timeStepPhase (maxTime: TimeStamp) (state: State) =
         
-        match State.nextPossibility m with
+        match State.nextPossibility state with
         | Some possibility ->
             if possibility.TimeStamp > maxTime then
-                SimulationState.Complete { m with Now = maxTime }
+                SimulationState.Complete { state with Now = maxTime }
             else
-                Possibility.handle possibility m
+                state
+                |> State.setNow possibility.TimeStamp
+                |> Possibility.handle possibility
                 |> SimulationState.Processing
         | None ->
-            SimulationState.Complete { m with Now = maxTime }
+            SimulationState.Complete { state with Now = maxTime }
 
 
     let rec run (maxTime: TimeStamp) (m: Model) =

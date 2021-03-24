@@ -11,7 +11,7 @@ let main argv =
     printfn "Hello world!"
             
     let resources = 
-        [for i in 1..5 -> Resource $"Resource:{i}"]
+        [for i in 1..2 -> Resource $"Resource:{i}"]
         |> Set
     
     let simplePlan =
@@ -19,9 +19,6 @@ let main argv =
             let! a = allocateOneOf (resources)
             delay (TimeSpan 2.0)
             free a
-            let! a2 = allocateOneOf resources
-            delay (TimeSpan 1.0)
-            free a2
         } |> Planning.create
     
     let g1 = Generator.create "G1" (Distribution.Constant 2.0) (PossibilityType.PlanArrival simplePlan)
