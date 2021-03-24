@@ -113,8 +113,8 @@ type FactId = FactId of int64
 
 [<RequireQualifiedAccess>]
 type FactType =
-    | AllocationRequested of allocationRequest:AllocationRequest
     | Allocated of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
+    | AllocationRequested of allocationRequest:AllocationRequest
     | Freed of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
     | StepStarted of procedureId:ProcedureId * stateId:StateId * step:Step
     | StepCompleted of procedureId:ProcedureId * stateId:StateId * step:Step

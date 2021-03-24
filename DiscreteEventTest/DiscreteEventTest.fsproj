@@ -8,7 +8,12 @@
   <ItemGroup>
     <Compile Include="Types.fs" />
     <Compile Include="Domain.fs" />
+    <Compile Include="Printer.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.38.0" />
   </ItemGroup>
 
 </Project>

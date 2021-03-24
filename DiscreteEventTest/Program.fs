@@ -32,4 +32,6 @@ let main argv =
     
     let r = Simulation.run maxTime m
     printfn "%A" (List.rev r.History)
+
+    Printer.history r
     0 // return an integer exit code
