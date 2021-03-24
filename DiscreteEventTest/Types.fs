@@ -78,8 +78,8 @@ type InstantId = InstantId of int64
 [<RequireQualifiedAccess>]
 type InstantType =
     | Free of procedureId: ProcedureId * allocationId: AllocationId
-    | Increment of ProcedureId
-    | ProcessNext of ProcedureId
+    //| Increment of ProcedureId
+    | Resume of ProcedureId
 
 type Instant = {
     InstantId : InstantId
