@@ -1,350 +1,251 @@
-﻿namespace Daws
+﻿namespace Desif
 
-module rec Domain =
+open Desif.Types
 
-    type Distribution =
-        | Constant of float
-        | Uniform of lowerBound:float * upperBound:float
+module Distribution =
 
-    module Distribution =
+    let sample (distribution: Distribution) =
+        match distribution with
+        | Constant c -> c
+        | Uniform (lowerBound, upperBound) -> lowerBound // Yes, this is wrong
 
-        let sample (distribution: Distribution) =
-            match distribution with
-            | Constant c -> c
-            | Uniform (lowerBound, upperBound) -> lowerBound // Yes, this is wrong
 
-    type GeneratorName = GeneratorName of string
+module Generator =
 
-    type Generator = {
-        Name : GeneratorName
-        Distribution : Distribution
-        PossibilityType : PossibilityType
-    }
-
-    module Generator =
-    
-        let create name distribution possibilityType =
-            {
-                Name = GeneratorName name
-                Distribution = distribution
-                PossibilityType = possibilityType
-            }
-
-    type Model = {
-        Resources : Set<Resource>
-        Generators : Set<Generator>
-    }
-    
-    type StateId = StateId of int64
-    type TimeStamp = TimeStamp of float
-    module TimeStamp =
-
-        let zero = TimeStamp 0.0
-
-    type TimeSpan = TimeSpan of float
-        with
-
-        static member (+) (TimeStamp stamp, TimeSpan span) =
-            TimeStamp (stamp + span)
-
-        static member (+) (span:TimeSpan, stamp:TimeStamp) =
-            stamp + span
-
-    type Resource = Resource of string
-    [<RequireQualifiedAccess>]
-    type Availability =
-        | Free
-        | Allocated of allocationId:AllocationId
-
-    type AllocationId = AllocationId of int64
-    module AllocationId =
-
-        let next (AllocationId allocationId) =
-            AllocationId (allocationId + 1L)
-
-    type Allocation = {
-        AllocationId : AllocationId
-        Quantity : int
-        Resources : Set<Resource>
-    }
-    module Allocation =
-
-        let create allocationId quantity resources =
-            {
-                AllocationId = allocationId
-                Quantity = quantity
-                Resources = resources
-            }
-
-    [<RequireQualifiedAccess>]
-    type StepType =
-        | Allocate of allocation: Allocation
-        | Free of allocationId: AllocationId
-        | Delay of timeSpan: TimeSpan
-        //| Move of item: ItemId * location: Location
-        // | Open of flow: Flow * flowDescription: FlowDescription
-        // | Close of flow: Flow
-
-    type StepId = StepId of int64
-    module StepId =
-        let next stepId =
-            let (StepId s) = stepId
-            StepId (s + 1L)
-
-    type Step = {
-        StepId : StepId
-        StepType : StepType
-    }
-    type Plan = Plan of Step list
-    type ProcedureId = ProcedureId of int64
-    module ProcedureId =
-        let next (ProcedureId i) =
-            ProcedureId (i + 1L)
-    type ProcedureState = {
-        ProcedureId : ProcedureId
-        StateId : StateId
-        Processed : Step list
-        Pending : Step list
-    }
-    module ProcedureState =
-        
-        let create procedureId (Plan steps) =
-            {
-                ProcedureId = procedureId
-                StateId = StateId 0L
-                Pending = steps
-                Processed = []
-            }
-
-    type InstantId = InstantId of int64
-    module InstantId =
-        
-        let next (InstantId i) =
-            InstantId (i + 1L)
-
-    type InstantType =
-        | Free of procedureId: ProcedureId * allocationId: AllocationId
-        | Increment of ProcedureId
-        | ProcessNext of ProcedureId
-    type Instant = {
-        InstantId : InstantId
-        InstantType : InstantType
-    }
-    module Instant =
-
-        let create instantId instantType =
-            {
-                InstantId = instantId
-                InstantType = instantType
-            }
-
-    type PossibilityId = PossibilityId of int64
-    module PossibilityId =
-        
-        let next (PossibilityId lastPossibilityId) =
-            PossibilityId (lastPossibilityId + 1L)
-
-    type PossibilityType = 
-        | Delay of procedureId: ProcedureId * stateId: StateId
-        | PlanArrival of plan: Plan
-        //| Increment of procedureId: ProcedureId * stateId: StateId
-
-    type Possibility =
+    let create name distribution possibilityType =
         {
-            PossibilityId : PossibilityId
-            TimeStamp : TimeStamp
-            PossibilityType : PossibilityType
+            Name = GeneratorName name
+            Distribution = distribution
+            PossibilityType = possibilityType
         }
 
-    module Possibility =
+
+module TimeStamp =
+
+    let zero = TimeStamp 0.0
+
+
+module AllocationId =
+
+    let next (AllocationId allocationId) =
+        AllocationId (allocationId + 1L)
+
+
+module Allocation =
+
+    let create allocationId quantity resources =
+        {
+            AllocationId = allocationId
+            Quantity = quantity
+            Resources = resources
+        }
+
+module StepId =
+
+    let next stepId =
+        let (StepId s) = stepId
+        StepId (s + 1L)
+
+
+module ProcedureId =
+
+    let next (ProcedureId i) =
+        ProcedureId (i + 1L)
+
+
+module ProcedureState =
+    
+    let create procedureId (Plan steps) =
+        {
+            ProcedureId = procedureId
+            StateId = StateId 0L
+            Pending = steps
+            Processed = []
+        }
+
         
-        let create possibilityId timeStamp possibilityType =
-            {
-                PossibilityId = possibilityId
-                TimeStamp = timeStamp
-                PossibilityType = possibilityType
-            }
-
-    //type LocationId = LocationId of int64
-    //type LocationName = LocationName of string
-    //type Location = Location of locationId:LocationId * locationName:LocationName
-    type AllocationRequest = {
-        RequestTimeStamp : TimeStamp
-        ProcedureId : ProcedureId
-        AllocationId : AllocationId
-        StateId : StateId
-        Quantity : int
-        Resources : Set<Resource>
-    }
-    module AllocationRequest =
-        let create timeStamp (procedure: ProcedureState) (allocation: Allocation) =
-            {
-                RequestTimeStamp = timeStamp
-                ProcedureId = procedure.ProcedureId
-                AllocationId = allocation.AllocationId
-                StateId = procedure.StateId
-                Quantity = allocation.Quantity
-                Resources = allocation.Resources
-            }
-
-    type ModelState = {
-        Now : TimeStamp
-        LastPossibilityId : PossibilityId
-        LastProcedureId : ProcedureId
-        LastInstantId : InstantId
-        FreeResources : Set<Resource>
-        Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
-        ProcedureStates : Map<ProcedureId, ProcedureState>
-        Instants : Set<Instant>
-        Possibilities : Set<Possibility>
-        OpenRequests : Set<AllocationRequest>
-        //RequestToResource : Map<ProcedureId * AllocationId, Resource>
-        //ResourceToRequest : Map<Resource, Set<ProcedureId * AllocationId>>
-    }
-
-    module ModelState =
-
-        let initial =
-            {
-                Now = TimeStamp 0.0
-                LastPossibilityId = PossibilityId 0L
-                LastProcedureId = ProcedureId 0L
-                LastInstantId = InstantId 0L
-                FreeResources = Set.empty
-                Allocations = Map.empty
-                ProcedureStates = Map.empty
-                Instants = Set.empty
-                Possibilities = Set.empty
-                OpenRequests = Set.empty
-            }
-
-        let nextPossibilityId (s: ModelState) =
-            let next = PossibilityId.next s.LastPossibilityId
-            next, { s with LastPossibilityId = next }
-
-        let nextProcedureId (s: ModelState) =
-            let next = ProcedureId.next s.LastProcedureId
-            next, { s with LastProcedureId = next}
-
-        module Initializers =
-
-            let addPossibility possibility modelState =
-                { modelState with Possibilities = Set.add possibility modelState.Possibilities }
-
-
-            let addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) modelState : ModelState =
-
-                let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (modelState: ModelState) (generator: Generator) =
-                    let nextTimespan = Distribution.sample generator.Distribution
-                    let nextTime = lastTime + (TimeSpan nextTimespan)
-                    if nextTime > maxTime then
-                        modelState
-                    else
-                        let nextPossibilityId, modelState = ModelState.nextPossibilityId modelState
-                        let nextPossibility = Possibility.create nextPossibilityId nextTime generator.PossibilityType
-                        addPossibility nextPossibility modelState
-
-
-                let modelState =
-                    (modelState, generators)
-                    ||> Seq.fold (add TimeStamp.zero maxTime)
-
-                modelState
-
-
-            let addResources resources modelState : ModelState =
-
-                let add modelState resource =
-                    { modelState with FreeResources = Set.add resource modelState.FreeResources }
+module InstantId =
             
-                (modelState, resources)
-                ||> Seq.fold add
+    let next (InstantId i) =
+        InstantId (i + 1L)
+
+
+module Instant =
+
+    let create instantId instantType =
+        {
+            InstantId = instantId
+            InstantType = instantType
+        }
+
+
+module PossibilityId =
+    
+    let next (PossibilityId lastPossibilityId) =
+        PossibilityId (lastPossibilityId + 1L)
+
+
+module Possibility =
+    
+    let create possibilityId timeStamp possibilityType =
+        {
+            PossibilityId = possibilityId
+            TimeStamp = timeStamp
+            PossibilityType = possibilityType
+        }
+
+
+module AllocationRequest =
+
+    let create timeStamp (procedure: ProcedureState) (allocation: Allocation) =
+        {
+            RequestTimeStamp = timeStamp
+            ProcedureId = procedure.ProcedureId
+            AllocationId = allocation.AllocationId
+            StateId = procedure.StateId
+            Quantity = allocation.Quantity
+            Resources = allocation.Resources
+        }
+
+
+module ModelState =
+
+    let initial =
+        {
+            Now = TimeStamp 0.0
+            LastPossibilityId = PossibilityId 0L
+            LastProcedureId = ProcedureId 0L
+            LastInstantId = InstantId 0L
+            FreeResources = Set.empty
+            Allocations = Map.empty
+            ProcedureStates = Map.empty
+            Instants = Set.empty
+            Possibilities = Set.empty
+            OpenRequests = Set.empty
+        }
+
+    let nextPossibilityId (s: ModelState) =
+        let next = PossibilityId.next s.LastPossibilityId
+        next, { s with LastPossibilityId = next }
+
+
+    let nextProcedureId (s: ModelState) =
+        let next = ProcedureId.next s.LastProcedureId
+        next, { s with LastProcedureId = next}
+
+
+    module Initializers =
+
+        let private addPossibility possibility modelState =
+            { modelState with Possibilities = Set.add possibility modelState.Possibilities }
+
+
+        let private addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) modelState : ModelState =
+
+            let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (modelState: ModelState) (generator: Generator) =
+                let nextTimespan = Distribution.sample generator.Distribution
+                let nextTime = lastTime + (TimeSpan nextTimespan)
+                if nextTime > maxTime then
+                    modelState
+                else
+                    let nextPossibilityId, modelState = nextPossibilityId modelState
+                    let nextPossibility = Possibility.create nextPossibilityId nextTime generator.PossibilityType
+                    addPossibility nextPossibility modelState
+
+            let modelState =
+                (modelState, generators)
+                ||> Seq.fold (add TimeStamp.zero maxTime)
+
+            modelState
+
+
+        let private addResources resources modelState : ModelState =
+
+            let add modelState resource =
+                { modelState with FreeResources = Set.add resource modelState.FreeResources }
+        
+            (modelState, resources)
+            ||> Seq.fold add
 
         let initialize (maxTime: TimeStamp) (model: Model) =
-            
+        
             initial
-            |> Initializers.addResources (model.Resources)
-            |> Initializers.addPossibilities maxTime model.Generators
+            |> addResources (model.Resources)
+            |> addPossibilities maxTime model.Generators
 
-        let nextPossibility (modelState: ModelState) =
-            match modelState.Possibilities.IsEmpty with
-            | true -> None
-            | false -> 
-                modelState.Possibilities
-                |> Seq.sortBy (fun x -> x.TimeStamp, x.PossibilityId)
-                |> Seq.head
-                |> Some
 
-        let nextInstant (m: ModelState) =
-            match m.Instants.IsEmpty with
-            | true -> None
-            | false ->
-                m.Instants
-                |> Seq.sortBy (fun x -> x.InstantId)
-                |> Seq.head
-                |> Some
+    let nextPossibility (modelState: ModelState) =
+        match modelState.Possibilities.IsEmpty with
+        | true -> None
+        | false -> 
+            modelState.Possibilities
+            |> Seq.sortBy (fun x -> x.TimeStamp, x.PossibilityId)
+            |> Seq.head
+            |> Some
 
-        let setProcedureState procedureId procedureState (m: ModelState) =
-            { m with ProcedureStates = Map.add procedureId procedureState m.ProcedureStates }
+    let nextInstant (m: ModelState) =
+        match m.Instants.IsEmpty with
+        | true -> None
+        | false ->
+            m.Instants
+            |> Seq.sortBy (fun x -> x.InstantId)
+            |> Seq.head
+            |> Some
 
-        let addInstant instantType (m: ModelState) =
-            let nextInstantId = InstantId.next m.LastInstantId
-            let nextInstant = Instant.create nextInstantId instantType
-            { m with 
-                LastInstantId = nextInstantId
-                Instants = Set.add nextInstant m.Instants
-            }
+    let setProcedureState procedureId procedureState (m: ModelState) =
+        { m with ProcedureStates = Map.add procedureId procedureState m.ProcedureStates }
 
-        let removeInstant (i: Instant) (m: ModelState) =
-            { m with Instants = Set.remove i m.Instants }
+    let addInstant instantType (m: ModelState) =
+        let nextInstantId = InstantId.next m.LastInstantId
+        let nextInstant = Instant.create nextInstantId instantType
+        { m with 
+            LastInstantId = nextInstantId
+            Instants = Set.add nextInstant m.Instants
+        }
 
-        let addAllocationRequest (a: AllocationRequest) (m: ModelState) =
-            { m with OpenRequests = Set.add a m.OpenRequests }
+    let removeInstant (i: Instant) (m: ModelState) =
+        { m with Instants = Set.remove i m.Instants }
 
-        let addPossibility (delay: TimeSpan) (possibilityType: PossibilityType) (m: ModelState) =
-            let nextPossibilityId = PossibilityId.next m.LastPossibilityId
-            let possibility = Possibility.create nextPossibilityId (m.Now + delay) possibilityType
-            { m with
-                LastPossibilityId = nextPossibilityId
-                Possibilities = Set.add possibility m.Possibilities
-            }
+    let addAllocationRequest (a: AllocationRequest) (m: ModelState) =
+        { m with OpenRequests = Set.add a m.OpenRequests }
 
-        let removePossibility (p: Possibility) (m: ModelState) =
-            { m with Possibilities = Set.remove p m.Possibilities }
+    let addPossibility (delay: TimeSpan) (possibilityType: PossibilityType) (m: ModelState) =
+        let nextPossibilityId = PossibilityId.next m.LastPossibilityId
+        let possibility = Possibility.create nextPossibilityId (m.Now + delay) possibilityType
+        { m with
+            LastPossibilityId = nextPossibilityId
+            Possibilities = Set.add possibility m.Possibilities
+        }
 
-        let startProcedure plan (m: ModelState) =
-            let nextProcedureId = ProcedureId.next m.LastProcedureId
-            let p = ProcedureState.create nextProcedureId plan
-            { m with
-                LastProcedureId = nextProcedureId
-                ProcedureStates = Map.add nextProcedureId p m.ProcedureStates
-            } |> addInstant (InstantType.ProcessNext nextProcedureId)
+    let removePossibility (p: Possibility) (m: ModelState) =
+        { m with Possibilities = Set.remove p m.Possibilities }
 
-        let addAllocation procedureId (a: Allocation) (m: ModelState) =
-            let newFreeResources = m.FreeResources - a.Resources
-            let newAllocations = Map.add (procedureId, a.AllocationId) a.Resources m.Allocations
-            { m with
-                FreeResources = newFreeResources
-                Allocations = newAllocations
-            }
+    let startProcedure plan (m: ModelState) =
+        let nextProcedureId = ProcedureId.next m.LastProcedureId
+        let p = ProcedureState.create nextProcedureId plan
+        { m with
+            LastProcedureId = nextProcedureId
+            ProcedureStates = Map.add nextProcedureId p m.ProcedureStates
+        } |> addInstant (InstantType.ProcessNext nextProcedureId)
 
-        let setOpenRequests (requests: Set<AllocationRequest>) (m: ModelState) =
-            { m with
-                OpenRequests = requests
-            }
+    let addAllocation procedureId (a: Allocation) (m: ModelState) =
+        let newFreeResources = m.FreeResources - a.Resources
+        let newAllocations = Map.add (procedureId, a.AllocationId) a.Resources m.Allocations
+        { m with
+            FreeResources = newFreeResources
+            Allocations = newAllocations
+        }
+
+    let setOpenRequests (requests: Set<AllocationRequest>) (m: ModelState) =
+        { m with
+            OpenRequests = requests
+        }
+
 
 module Simulation =
 
-    open Domain
     open ModelState
 
-    type AllocationResult =
-        | Success of modelState: ModelState
-        | Failure of allocationRequest: AllocationRequest
-
-    type SimulationState =
-        | Complete of modelState: ModelState
-        | Processing of modelState: ModelState
 
     module Instant =
 
@@ -504,12 +405,8 @@ module Simulation =
         | Processing newState -> run maxTime newState
         | Complete newState -> newState
 
-            
-
 
 module Planning =
-
-    open Domain
 
     type State<'a, 's> = ('s -> 'a * 's)
     type PlanAcc = PlanAcc of lastAllocationId:AllocationId * lastStepId:StepId * steps:Step list

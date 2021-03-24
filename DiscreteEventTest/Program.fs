@@ -1,9 +1,9 @@
 ﻿// Learn more about F# at http://docs.microsoft.com/dotnet/fsharp
 
 open System
-open Daws
-open Daws.Domain
-open Daws.Planning
+open Desif
+open Desif.Domain
+open Desif.Planning
     
 
 
