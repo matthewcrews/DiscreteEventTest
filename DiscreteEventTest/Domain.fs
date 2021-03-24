@@ -47,6 +47,17 @@ module StepId =
         StepId (s + 1L)
 
 
+module StepType =
+
+    let allocate allocationId quantity resources =
+        StepType.Allocate (allocationId, quantity, resources)
+
+    let free allocationId =
+        StepType.Free allocationId
+
+    let delay timeSpan =
+        StepType.Delay timeSpan
+
 module ProcedureId =
 
     let next (ProcedureId i) =
@@ -282,8 +293,9 @@ module Simulation =
                 state
             | next::remaining ->
                 match next.StepType with
-                | StepType.Allocate a ->
-                    let request = AllocationRequest.create state.Now procedureState a
+                | StepType.Allocate (allocationId, quantity, resources) ->
+                    let allocation = Allocation.create allocationId quantity resources
+                    let request = AllocationRequest.create state.Now procedureState allocation
                     addAllocationRequest request state
                 | StepType.Delay s ->
                     addPossibility s (PossibilityType.Delay (procedureState.ProcedureId, procedureState.StateId)) state
@@ -369,22 +381,26 @@ module Simulation =
         processAllocations [] requests m
 
 
-    let rec runPhase (m: ModelState) =
+    /// We process all Instants and Allocations at a moment in time before proceeding to the
+    /// next moment in time
+    let rec immediatePhase (m: ModelState) =
 
         match ModelState.nextInstant m with
         | Some i ->
             Instant.handle i m
-            |> runPhase
+            |> immediatePhase
         | None ->
             let prevOpenRequests = m.OpenRequests
             let newState = runAllocationPhase m
             // If allocations have occured, we want to re-run the Instants
             if prevOpenRequests <> newState.OpenRequests then
-                runPhase newState
+                immediatePhase newState
             else
                 newState
 
-    let step (maxTime: TimeStamp) (m: ModelState) =
+
+    /// This is when we take a step forward in time and process the next Possibility
+    let timeStepPhase (maxTime: TimeStamp) (m: ModelState) =
         
         match ModelState.nextPossibility m with
         | Some possibility ->
@@ -396,14 +412,21 @@ module Simulation =
         | None ->
             SimulationState.Complete { m with Now = maxTime }
 
-    let rec run (maxTime: TimeStamp) (m: ModelState) =
 
-        let r = 
-            runPhase m
-            |> step maxTime
-        match r with
-        | SimulationState.Processing newState -> run maxTime newState
-        | SimulationState.Complete newState -> newState
+    let rec run (maxTime: TimeStamp) (m: Model) =
+
+        let initialState = ModelState.Initializers.initialize maxTime m
+
+        let rec loop (maxTime: TimeStamp) (modelState: ModelState) =
+
+            let r = 
+                immediatePhase modelState
+                |> timeStepPhase maxTime
+            match r with
+            | SimulationState.Processing newState -> loop maxTime newState
+            | SimulationState.Complete newState -> newState
+
+        loop maxTime initialState
 
 
 module Planning =
@@ -468,12 +491,8 @@ module Planning =
             let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
             let nextStepId = StepId.next lastStepId
             let nextAllocationId = AllocationId.next lastAllocationId
-            let allocation : Allocation = {
-                AllocationId = nextAllocationId
-                Quantity = 1
-                Resources = resources
-            }
-            let stepType = StepType.Allocate allocation
+            let quantity = 1 // This is the value for the `allocateOneOf` step command
+            let stepType = StepType.Allocate (nextAllocationId, quantity, resources)
             let newStep = {
                 StepId = nextStepId
                 StepType = stepType
@@ -490,14 +509,14 @@ module Planning =
             state {
                 let! x = st
                 let d = duration x
-                let! (PlanAcc (state, lastStepId, steps)) = State.getState
+                let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
                 let nextStepId = StepId.next lastStepId
                 let stepType = StepType.Delay d
                 let newStep = {
                     StepId = nextStepId
                     StepType = stepType
                 }
-                let newAcc = PlanAcc (state, nextStepId, newStep::steps)
+                let newAcc = PlanAcc (lastAllocationId, nextStepId, newStep::steps)
                 do! State.setState newAcc
                 return x 
             }
@@ -508,14 +527,14 @@ module Planning =
             state {
                 let! x = st
                 let a = allocationId x
-                let! (PlanAcc (state, lastStepId, steps)) = State.getState
+                let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
                 let nextStepId = StepId.next lastStepId
                 let stepType = StepType.Free a
                 let newStep = {
                     StepId = nextStepId
                     StepType = stepType
                 }
-                let newAcc = PlanAcc (state, nextStepId, newStep::steps)
+                let newAcc = PlanAcc (lastAllocationId, nextStepId, newStep::steps)
                 do! State.setState newAcc
                 return x 
             }

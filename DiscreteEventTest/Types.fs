@@ -48,7 +48,7 @@ type Allocation = {
 
 [<RequireQualifiedAccess>]
 type StepType =
-    | Allocate of allocation: Allocation
+    | Allocate of allocationId: AllocationId * quantity: int * resources: Set<Resource>
     | Free of allocationId: AllocationId
     | Delay of timeSpan: TimeSpan
     //| Move of item: ItemId * location: Location

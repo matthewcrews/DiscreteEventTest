@@ -2,9 +2,8 @@
 
 open System
 open Desif
-open Desif.Domain
+open Desif.Types
 open Desif.Planning
-    
 
 
 [<EntryPoint>]
@@ -34,7 +33,6 @@ let main argv =
     
     let maxTime = TimeStamp 10.0
     
-    let ms = ModelState.initialize maxTime m
-    let r = Simulation.run maxTime ms
+    let r = Simulation.run maxTime m
 
     0 // return an integer exit code
