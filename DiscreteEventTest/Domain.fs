@@ -265,21 +265,21 @@ module State =
 
     module Initializers =
 
-        let private addPossibility possibility modelState =
-            { modelState with Possibilities = Set.add possibility modelState.Possibilities }
+        let private addPossibility state possibility =
+            { state with Possibilities = Set.add possibility state.Possibilities }
 
 
         let private addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) modelState : State =
 
-            let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (modelState: State) (generator: Generator) =
+            let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (state: State) (generator: Generator) =
                 let nextTimespan = Distribution.sample generator.Distribution
                 let nextTime = lastTime + (TimeSpan nextTimespan)
                 if nextTime > maxTime then
-                    modelState
+                    state
                 else
-                    let nextPossibilityId, modelState = nextPossibilityId modelState
+                    let nextPossibilityId, modelState = nextPossibilityId state
                     let nextPossibility = Possibility.create nextPossibilityId nextTime generator.PossibilityType
-                    let newState = addPossibility nextPossibility modelState
+                    let newState = addPossibility state nextPossibility
                     add nextTime maxTime newState generator
 
             let modelState =
@@ -299,11 +299,17 @@ module State =
             (state, resources)
             ||> Seq.fold add
 
+        let private addSchedule (Schedule schedule) (state: State) =
+            
+            (state, schedule)
+            ||> List.fold addPossibility
+
         let initialize (maxTime: TimeStamp) (model: Model) =
         
             initial
             |> addResources (model.Resources)
             |> addPossibilities maxTime model.Generators
+            |> addSchedule model.Schedule
 
 
     let nextPossibility (modelState: State) =
@@ -567,6 +573,14 @@ module State =
                 |> setProcedureState newProcedure // TODO: Clean up this wording
                 
 
+    let processCompletion (completion: Completion) (state: State) =
+        let p = state.Procedures.[completion.ProcedureId]
+
+        if p.StateId = completion.StateId then
+            addInstant (InstantType.proceed completion.ProcedureId) state
+        else
+            state
+
 
 module Simulation =
 
@@ -576,40 +590,32 @@ module Simulation =
     module Instant =
 
         let handle (instant: Instant) (state: State) =
+            state |>
             match instant.InstantType with
             | InstantType.Free (procedureId, allocationId) -> 
-                State.freeAllocation procedureId allocationId state
+                State.freeAllocation procedureId allocationId
             | InstantType.Proceed procedureId ->
-                State.proceed procedureId state
-
+                State.proceed procedureId
             | InstantType.Restore resource ->
-                State.restoreResource resource state
+                State.restoreResource resource
             | InstantType.HandleFailure (resource, procedureId, allocationId) ->
-                State.handleFailure resource procedureId allocationId state
+                State.handleFailure resource procedureId allocationId
             | InstantType.HandleRestore (resource, procedureId, allocationId) ->
-                State.handleRestore resource procedureId allocationId state
+                State.handleRestore resource procedureId allocationId
+            |> State.removeInstant instant
+
 
     module Possibility =
 
-        let private planArrival plan (modelState: State) =
-            State.startProcedure plan modelState
-
-
-        let private delay (procedureId: ProcedureId) (stateId: StateId) (state: State) =
-            let p = state.Procedures.[procedureId]
-
-            if p.StateId = stateId then
-                State.addInstant (InstantType.proceed procedureId) state
-            else
-                state
-
-
         let handle (next: Possibility) (state: State) : State =
+            state |>
             match next.PossibilityType with
-            | PossibilityType.PlanArrival plan -> 
-                planArrival plan state
             | PossibilityType.Completion completion -> 
-                delay procedureId stateId state
+                State.processCompletion completion
+            | PossibilityType.PlanArrival plan -> 
+                State.startProcedure plan
+            | PossibilityType.Failure resource ->
+                State.failResource resource
             |> State.removePossibility next
         
 
@@ -645,7 +651,7 @@ module Simulation =
         state.OpenRequests
         // We check that the procedure is still waiting for the allocation. If it is in
         // a new state due to a rollback, the allocation request is no longer valid.
-        |> Set.filter (fun x -> state.ProcedureStates.[x.ProcedureId].StateId = x.StateId)
+        |> Set.filter (fun x -> state.Procedures.[x.ProcedureId].StateId = x.StateId)
         |> Seq.sortBy (fun x -> x.RequestTimeStamp)
         |> List.ofSeq
 
@@ -671,7 +677,8 @@ module Simulation =
         match State.nextInstant state with
         | Some i ->
             Instant.handle i state
-            |> ArrivalTimeStamp   | None ->
+            |> immediatePhase
+        | None ->
             let prevOpenRequests = state.OpenRequests
             let newState = runAllocationPhase state
             // If new Instants aArrivalTimeStampeed to process them
@@ -686,25 +693,25 @@ module Simulation =
         
         match State.nextPossibility state with
         | Some possibility ->
-            if possibility.TimeStamp > maxTime then
+            if possibility.ArrivalTimeStamp > maxTime then
                 SimulationState.Complete { state with Now = maxTime }
             else
                 state
-                |> State.setNow possibility.TimeStamp
+                |> State.setNow possibility.ArrivalTimeStamp
                 |> Possibility.handle possibility
                 |> SimulationState.Processing
         | None ->
             SimulationState.Complete { state with Now = maxTime }
 
 
-    let rec run (maxTime: TimeStamp) (m: Model) =
+    let rec run (maxTime: TimeStamp) (model: Model) =
 
-        let initialState = State.Initializers.initialize maxTime m
+        let initialState = State.Initializers.initialize maxTime model
 
-        let rec loop (maxTime: TimeStamp) (modelState: State) =
+        let rec loop (maxTime: TimeStamp) (state: State) =
 
             let r = 
-                immediatePhase modelState
+                immediatePhase state
                 |> timeStepPhase maxTime
             match r with
             | SimulationState.Processing newState -> loop maxTime newState

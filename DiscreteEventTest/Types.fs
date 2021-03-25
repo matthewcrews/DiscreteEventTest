@@ -13,9 +13,12 @@ type Generator = {
     PossibilityType : PossibilityType
 }
 
+type Schedule = Schedule of Possibility list
+
 type Model = {
     Resources : Set<Resource>
     Generators : Set<Generator>
+    Schedule : Schedule
 }
 
 type StateId = StateId of int64
@@ -169,10 +172,10 @@ type State = {
 
 [<RequireQualifiedAccess>]
 type AllocationResult =
-    | Success of modelState: State
+    | Success of state: State
     | Failure of allocationRequest: AllocationRequest
 
 [<RequireQualifiedAccess>]
 type SimulationState =
-    | Complete of modelState: State
-    | Processing of modelState: State
+    | Complete of state: State
+    | Processing of state: State
