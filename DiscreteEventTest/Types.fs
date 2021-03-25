@@ -92,7 +92,6 @@ type InstantId = InstantId of int64
 type InstantType =
     | Free of procedureId: ProcedureId * allocationId: AllocationId
     | Proceed of procedureId: ProcedureId
-    //| AttemptResume of procedureId: ProcedureId
     | Restore of resource: Resource
     | HandleFailure of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId
     | HandleRestore of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId

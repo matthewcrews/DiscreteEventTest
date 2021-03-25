@@ -1,6 +1,4 @@
-﻿// Learn more about F# at http://docs.microsoft.com/dotnet/fsharp
-
-open System
+﻿open System
 open Desif
 open Desif.Types
 open Desif.Planning
@@ -30,7 +28,7 @@ let main argv =
             restore r1
         } |> Planning.create
 
-    let g1 = Generator.create "G1" (Distribution.Constant 2.0) (PossibilityType.PlanArrival simplePlan)
+    //let g1 = Generator.create "G1" (Distribution.Constant 2.0) (PossibilityType.PlanArrival simplePlan)
     
     let m : Model = {
         Resources = Set resources
