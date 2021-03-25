@@ -143,8 +143,8 @@ module PossibilityId =
 
 module PossibilityType =
 
-    let failure resource =
-        PossibilityType.Failure resource
+    let failure procedureId resource =
+        PossibilityType.Failure (procedureId, resource)
 
 
 module Possibility =
@@ -337,8 +337,8 @@ module State =
             |> Some
 
 
-    let private setProcedureState (procedureState: Procedure) (state: State) =
-        { state with Procedures = Map.add procedureState.ProcedureId procedureState state.Procedures }
+    let private setProcedure (procedure: Procedure) (state: State) =
+        { state with Procedures = Map.add procedure.ProcedureId procedure state.Procedures }
 
 
     let addInstant instantType (state: State) =
@@ -386,9 +386,13 @@ module State =
     let addAllocation procedureId (a: Allocation) (state: State) =
         let newFreeResources = state.Free - a.Resources
         let newAllocations = Map.add (procedureId, a.AllocationId) a.Resources state.Allocations
+        let newAssignments =
+            (state.Assignments, a.Resources)
+            ||> Seq.fold (fun s r -> Map.add r (procedureId, a.AllocationId) s)
         { state with
             Free = newFreeResources
             Allocations = newAllocations
+            Assignments = newAssignments
         }
         |> addFact (FactType.allocated procedureId a.AllocationId a.Resources)
 
@@ -418,26 +422,33 @@ module State =
             |> (fun x -> procedureState, x)
 
 
-    let private processStep (next: Step) (procedureState: Procedure) (state: State) =
+    let private processStep (next: Step) (procedure: Procedure) (state: State) =
         state |>
         match next.StepType with
         | StepType.Allocate (allocationId, quantity, resources) ->
             let allocation = Allocation.create allocationId quantity resources
-            let request = AllocationRequest.create state.Now procedureState allocation
+            let request = AllocationRequest.create state.Now procedure allocation
             addAllocationRequest request
         | StepType.Delay timeSpan ->
+            let nextStateId = StateId.next procedure.StateId
             let completion =
                 {
-                    ProcedureId = procedureState.ProcedureId
-                    StateId = procedureState.StateId
+                    ProcedureId = procedure.ProcedureId
+                    StateId = nextStateId
                     StepId = next.StepId
                     CompletionTimeStamp = state.Now + timeSpan
                 }
-            addPossibility timeSpan (PossibilityType.Completion completion)
+            let newProcedure = 
+                { procedure with 
+                    StateId = nextStateId
+                    ProcedureState = ProcedureState.waiting completion 
+                }
+            setProcedure newProcedure
+            >> addPossibility timeSpan (PossibilityType.Completion completion)
         | StepType.Free allocationId ->
-            addInstant (InstantType.free procedureState.ProcedureId allocationId)
+            addInstant (InstantType.free procedure.ProcedureId allocationId)
         | StepType.Fail resource ->
-            addPossibility TimeSpan.zero (PossibilityType.failure resource)
+            addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
         | StepType.Restore resource ->
             addInstant (InstantType.restore resource)
         
@@ -453,7 +464,7 @@ module State =
               Procedure.create procedureState.ProcedureId nextStateId remainingSteps (nextStep::remainingSteps) (ProcedureState.Running)
 
           state
-          |> setProcedureState newProcedureState
+          |> setProcedure newProcedureState
           |> addFact (FactType.stepStarted procedureState.ProcedureId procedureState.StateId nextStep)
           |> processStep nextStep newProcedureState
 
@@ -494,11 +505,12 @@ module State =
       { state with Down = newDown }
 
 
-    let failResource (resource: Resource) (state: State) =
+    let failResource (procedureId: ProcedureId) (resource: Resource) (state: State) =
         state
         |> addResourceToDown resource
         |> addFact (FactType.failed resource)
         |> addHandleFailure resource
+        |> proceed procedureId
 
 
     let restoreResource (resource: Resource) (state: State) =
@@ -517,6 +529,7 @@ module State =
         match procedure.ProcedureState with
         | ProcedureState.Running ->
             // Kind of strange if this happened ?
+            failwith "Probably shouldn't happen :/"
             state
         | ProcedureState.WaitingFor possibility ->
             let nextStateId = StateId.next procedure.StateId
@@ -526,7 +539,7 @@ module State =
                     StateId = nextStateId
                     ProcedureState = newProcedureState 
                 }
-            setProcedureState newProcedure state
+            setProcedure newProcedure state
 
         | ProcedureState.Suspended (suspendedAt, waitingFor, suspendedFor) ->
             let newProcedureState = ProcedureState.Suspended (suspendedAt, waitingFor, Set.add resource suspendedFor)
@@ -536,7 +549,7 @@ module State =
                     StateId = nextStateId
                     ProcedureState = newProcedureState 
                 }
-            setProcedureState newProcedure state
+            setProcedure newProcedure state
 
     let handleRestore resource procedureId allocationId state =
         let procedure = state.Procedures.[procedureId]
@@ -566,7 +579,7 @@ module State =
                     }
 
                 state
-                |> setProcedureState newProcedure // TODO: Clean up this wording
+                |> setProcedure newProcedure // TODO: Clean up this wording
                 |> addPossibility newDelay (PossibilityType.Completion newCompletion)
             | false ->
                 let newProcedure = 
@@ -575,7 +588,7 @@ module State =
                     }
 
                 state
-                |> setProcedureState newProcedure // TODO: Clean up this wording
+                |> setProcedure newProcedure // TODO: Clean up this wording
                 
 
     let processCompletion (completion: Completion) (state: State) =
@@ -619,8 +632,8 @@ module Simulation =
                 State.processCompletion completion
             | PossibilityType.PlanArrival plan -> 
                 State.startProcedure plan
-            | PossibilityType.Failure resource ->
-                State.failResource resource
+            | PossibilityType.Failure (procedureId, resource) ->
+                State.failResource procedureId resource
             |> State.removePossibility next
         
 

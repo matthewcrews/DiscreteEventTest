@@ -11,7 +11,7 @@ let main argv =
     printfn "Hello world!"
             
     let resources = 
-        [for i in 1..2 -> Resource $"Resource:{i}"]
+        [for i in 1..1 -> Resource $"Resource:{i}"]
         |> Set
     
     let r1 = resources.MinimumElement
@@ -19,7 +19,7 @@ let main argv =
     let simplePlan =
         planner {
             let! a = allocateOneOf (resources)
-            delay (TimeSpan 2.0)
+            delay (TimeSpan 4.0)
             free a
         } |> Planning.create
     
@@ -37,7 +37,8 @@ let main argv =
         Generators = Set.empty
         Schedule = 
             Schedule [
-                Possibility.create (PossibilityId -1L) TimeStamp.zero (PossibilityType.PlanArrival failurePlan)
+                Possibility.create (PossibilityId -10L) TimeStamp.zero (PossibilityType.PlanArrival simplePlan)
+                Possibility.create (PossibilityId -9L) (TimeStamp 2.0) (PossibilityType.PlanArrival failurePlan)
             ]
     }
     

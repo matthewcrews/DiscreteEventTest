@@ -73,6 +73,7 @@ type ProcedureId = ProcedureId of int64
 
 [<RequireQualifiedAccess>]
 type ProcedureState =
+    // TODO: Waiting for Allocation
     | Running
     | WaitingFor of completion: Completion
     | Suspended of suspendedAt: TimeStamp * waitingFor: Completion * suspendedFor: Set<Resource>
@@ -114,7 +115,7 @@ type PossibilityId = PossibilityId of int64
 type PossibilityType = 
     | Completion of completion: Completion
     | PlanArrival of plan: Plan
-    | Failure of resource: Resource
+    | Failure of procedureId: ProcedureId * resource: Resource
 
 type Possibility =
     {
