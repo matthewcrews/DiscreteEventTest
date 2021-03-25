@@ -25,6 +25,11 @@ module TimeStamp =
     let zero = TimeStamp 0.0
 
 
+module TimeSpan =
+    
+    let zero = TimeSpan 0.0
+
+
 module AllocationId =
 
     let next (AllocationId allocationId) =
@@ -431,8 +436,8 @@ module State =
             addPossibility timeSpan (PossibilityType.Completion completion)
         | StepType.Free allocationId ->
             addInstant (InstantType.free procedureState.ProcedureId allocationId)
-        | StepType.Fail (resource, timeTo) ->
-            addPossibility timeTo (PossibilityType.failure resource)
+        | StepType.Fail resource ->
+            addPossibility TimeSpan.zero (PossibilityType.failure resource)
         | StepType.Restore resource ->
             addInstant (InstantType.restore resource)
         
@@ -821,6 +826,40 @@ module Planning =
                 let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
                 let nextStepId = StepId.next lastStepId
                 let stepType = StepType.Free a
+                let newStep = {
+                    StepId = nextStepId
+                    StepType = stepType
+                }
+                let newAcc = PlanAcc (lastAllocationId, nextStepId, newStep::steps)
+                do! State.setState newAcc
+                return x 
+            }
+
+        [<CustomOperation("fail", MaintainsVariableSpaceUsingBind=true)>]
+        member this.Fail (st:State<_,PlanAcc>, [<ProjectionParameter>] (resource: 'a -> Resource)) =
+            state {
+                let! x = st
+                let r = resource x
+                let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
+                let nextStepId = StepId.next lastStepId
+                let stepType = StepType.Fail r
+                let newStep = {
+                    StepId = nextStepId
+                    StepType = stepType
+                }
+                let newAcc = PlanAcc (lastAllocationId, nextStepId, newStep::steps)
+                do! State.setState newAcc
+                return x 
+            }
+
+        [<CustomOperation("restore", MaintainsVariableSpaceUsingBind=true)>]
+        member this.Restore (st:State<_,PlanAcc>, [<ProjectionParameter>] (resource: 'a -> Resource)) =
+            state {
+                let! x = st
+                let r = resource x
+                let! (PlanAcc (lastAllocationId, lastStepId, steps)) = State.getState
+                let nextStepId = StepId.next lastStepId
+                let stepType = StepType.Restore r
                 let newStep = {
                     StepId = nextStepId
                     StepType = stepType

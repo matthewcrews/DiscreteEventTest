@@ -14,6 +14,8 @@ let main argv =
         [for i in 1..2 -> Resource $"Resource:{i}"]
         |> Set
     
+    let r1 = resources.MinimumElement
+
     let simplePlan =
         planner {
             let! a = allocateOneOf (resources)
@@ -21,11 +23,22 @@ let main argv =
             free a
         } |> Planning.create
     
+    let failurePlan =
+        planner {
+            fail r1
+            delay (TimeSpan 3.0)
+            restore r1
+        } |> Planning.create
+
     let g1 = Generator.create "G1" (Distribution.Constant 2.0) (PossibilityType.PlanArrival simplePlan)
     
     let m : Model = {
         Resources = Set resources
-        Generators = Set [g1]
+        Generators = Set.empty
+        Schedule = 
+            Schedule [
+                Possibility.create (PossibilityId -1L) TimeStamp.zero (PossibilityType.PlanArrival failurePlan)
+            ]
     }
     
     let maxTime = TimeStamp 10.0

@@ -13,6 +13,7 @@ type Generator = {
     PossibilityType : PossibilityType
 }
 
+// TODO: Make a better type for this that's better suited
 type Schedule = Schedule of Possibility list
 
 type Model = {
@@ -53,7 +54,7 @@ type StepType =
     | Allocate of allocationId: AllocationId * quantity: int * resources: Set<Resource>
     | Delay of timeSpan: TimeSpan
     | Free of allocationId: AllocationId
-    | Fail of resource: Resource * timeTo: TimeSpan
+    | Fail of resource: Resource
     | Restore of resource: Resource
     //| Move of item: ItemId * location: Location
     // | Open of flow: Flow * flowDescription: FlowDescription
