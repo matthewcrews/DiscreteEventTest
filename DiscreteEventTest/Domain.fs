@@ -16,6 +16,13 @@ module Seq =
         ||> Seq.fold (fun a b -> folder b a)
 
 
+module Map =
+
+    let removeAll keys map =
+        (map, keys)
+        ||> Seq.foldR Map.remove
+
+
 module Distribution =
 
     let sample (distribution: Distribution) =

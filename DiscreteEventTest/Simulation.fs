@@ -110,7 +110,7 @@ module private Phases =
         | None ->
             let newState = runAllocations state
             // If new Instants have spawned, we must process them
-            if not (Set.isEmpty newState.Instants) then
+            if not (List.isEmpty newState.Instants) then
                 runImmediatePhase newState
             else
                 newState

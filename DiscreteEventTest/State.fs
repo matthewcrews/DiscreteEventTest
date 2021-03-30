@@ -16,7 +16,7 @@ let initial =
         Allocations = Map.empty
         Assignments = Map.empty
         Procedures = Map.empty
-        Instants = Set.empty
+        Instants = []
         Possibilities = Set.empty
         OpenRequests = Set.empty
         History = []
@@ -126,15 +126,17 @@ let nextPossibility (modelState: State) =
 
 
 let nextInstant (state: State) =
-    match state.Instants.IsEmpty with
-    | true -> None
-    | false ->
-        state.Instants
-        // TODO: Better data structure
-        |> Seq.sortBy (fun x -> x.InstantId)
-        |> Seq.head
-        |> Some
-
+    //match state.Instants.IsEmpty with
+    //| true -> None
+    //| false ->
+    //    state.Instants
+    //    // TODO: Better data structure
+    //    |> Seq.sortBy (fun x -> x.InstantId)
+    //    |> Seq.head
+    //    |> Some
+    match state.Instants with
+    | [] -> None
+    | next::_ -> Some next
 
 let private setProcedure (procedure: Procedure) (state: State) =
     { state with Procedures = Map.add procedure.ProcedureId procedure state.Procedures }
@@ -145,12 +147,12 @@ let addInstant instantType (state: State) =
     let nextInstant = Instant.create nextInstantId instantType
     { state with 
         LastInstantId = nextInstantId
-        Instants = Set.add nextInstant state.Instants
+        Instants = nextInstant::state.Instants
     }
 
 
 let removeInstant (i: Instant) (state: State) =
-    { state with Instants = Set.remove i state.Instants }
+    { state with Instants = List.where (fun x -> i <> x) state.Instants }
 
 
 let addAllocationRequest (a: AllocationRequest) (state: State) =
@@ -205,6 +207,7 @@ let freeAllocation (procedureId: ProcedureId) (allocationId: AllocationId) (stat
     { state with
         FreeResources = resources + state.FreeResources
         Allocations = Map.remove (procedureId, allocationId) state.Allocations
+        Assignments = Map.removeAll resources state.Assignments 
     }
     |> addFact (FactType.freed procedureId allocationId resources)
     |> addInstant (InstantType.proceed procedureId)
