@@ -6,7 +6,7 @@ open Desif.Types
 
 let initial =
     {
-        Now = TimeStamp 0.0
+        Now = TimeStamp.zero
         LastFactId = FactId 0L
         LastPossibilityId = PossibilityId 0L
         LastProcedureId = ProcedureId 0L
@@ -36,7 +36,7 @@ let addFact (factType: FactType) (state: State) =
     }
 
 
-let addPossibility (delay: TimeSpan) (possibilityType: PossibilityType) (state: State) =
+let addPossibility (delay: Interval) (possibilityType: PossibilityType) (state: State) =
     let nextPossibilityId = PossibilityId.next state.LastPossibilityId
     let possibility = Possibility.create nextPossibilityId (state.Now + delay) possibilityType
     { state with
@@ -68,7 +68,12 @@ module private Initializers =
     let addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) (modelState: State) : State =
 
         let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (generator: Generator) (state: State) =
-            let nextTimeSpan = Distribution.sample generator.Distribution |> TimeSpan
+            let nextTimeSpan = 
+                // Yes, this is terrible. It will be refactored
+                Distribution.sample generator.Distribution
+                |> int
+                |> fun x -> System.TimeSpan (0, x, 0)
+                |> Interval
             let nextTime = lastTime + nextTimeSpan
             if nextTime > maxTime then
                 state

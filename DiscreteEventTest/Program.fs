@@ -17,14 +17,14 @@ let main argv =
     let simplePlan =
         planner {
             let! a = allocateOneOf (resources)
-            delay (TimeSpan 4.0)
+            delay (Interval (TimeSpan(0, 2, 0)))
             free a
         } |> Planning.create
     
     let failurePlan =
         planner {
             fail r1
-            delay (TimeSpan 3.0)
+            delay (Interval (TimeSpan(0, 3, 0)))
             restore r1
         } |> Planning.create
 
@@ -36,11 +36,11 @@ let main argv =
         Schedule = 
             Schedule [
                 ScheduledEvent.StartPlan (simplePlan, TimeStamp.zero)
-                ScheduledEvent.StartPlan (failurePlan, (TimeStamp 2.0))
+                ScheduledEvent.StartPlan (failurePlan, (TimeStamp (TimeSpan(0, 2, 0))))
             ]
     }
     
-    let maxTime = TimeStamp 10.0
+    let maxTime = TimeStamp (TimeSpan(0, 10, 0))
     
     let r = Simulation.run maxTime m
     printfn "%A" (List.rev r.History)

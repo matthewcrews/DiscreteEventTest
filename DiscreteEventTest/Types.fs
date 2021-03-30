@@ -27,20 +27,23 @@ type Model = {
 
 type StateId = StateId of int64
 
-type TimeStamp = TimeStamp of float
+type TimeStamp = TimeStamp of System.TimeSpan
     with
 
     static member (-) (TimeStamp t1, TimeStamp t2) =
-        TimeSpan (t1 - t2)
+        Interval (t1 - t2)
 
-type TimeSpan = TimeSpan of float
+type Interval = Interval of System.TimeSpan
     with
 
-    static member (+) (TimeStamp stamp, TimeSpan span) =
+    static member (+) (TimeStamp stamp, Interval span) =
         TimeStamp (stamp + span)
 
-    static member (+) (span:TimeSpan, stamp:TimeStamp) =
+    static member (+) (span:Interval, stamp:TimeStamp) =
         stamp + span
+
+    static member (+) (Interval i1, Interval i2) =
+        Interval (i1 + i2)
 
 type Resource = Resource of string
 
@@ -55,7 +58,7 @@ type Allocation = {
 [<RequireQualifiedAccess>]
 type StepType =
     | Allocate of allocationId: AllocationId * numberOf: int * resources: Set<Resource>
-    | Delay of timeSpan: TimeSpan
+    | Delay of timeSpan: Interval
     | FreeAllocation of allocationId: AllocationId
     | Fail of resource: Resource
     | Restore of resource: Resource

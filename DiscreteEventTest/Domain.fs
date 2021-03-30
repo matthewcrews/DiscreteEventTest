@@ -36,12 +36,12 @@ module Generator =
 
 module TimeStamp =
 
-    let zero = TimeStamp 0.0
+    let zero = TimeStamp System.TimeSpan.Zero
 
 
 module TimeSpan =
     
-    let zero = TimeSpan 0.0
+    let zero = Interval System.TimeSpan.Zero
 
 
 module AllocationId =
@@ -320,7 +320,7 @@ module Planning =
     type PlanBuilder with
 
         [<CustomOperation("delay", MaintainsVariableSpaceUsingBind=true)>]
-        member this.Delay (st:State<_,PlanAcc>, [<ProjectionParameter>] (duration: 'a -> TimeSpan)) =
+        member this.Delay (st:State<_,PlanAcc>, [<ProjectionParameter>] (duration: 'a -> Interval)) =
             state {
                 let! x = st
                 let d = duration x
