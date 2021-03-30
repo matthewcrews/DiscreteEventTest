@@ -22,7 +22,6 @@ module private Instant =
             State.handleFailure resource procedureId allocationId
         | InstantType.HandleRestore (resource, procedureId, allocationId) ->
             State.Possibility.apply resource procedureId allocationId
-        |> State.removeInstant instant
 
 
 module private Possibility =
@@ -36,7 +35,6 @@ module private Possibility =
             State.startProcedure plan
         //| PossibilityType.Failure (procedureId, resource) ->
         //    State.failResource procedureId resource
-        |> State.removePossibility next
         
 
 module private Allocate =
@@ -57,25 +55,15 @@ module private Allocate =
             let newAllocation = Allocation.create r.AllocationId r.Quantity toAllocate
             State.addAllocation r.ProcedureId newAllocation state
             |> State.removeAllocationRequest r
-            |> State.addInstant (InstantType.proceed r.ProcedureId)
+            |> State.enqueueInstant (InstantType.proceed r.ProcedureId)
             |> AllocationResult.Success
 
 
 module private Phases =
 
-    // We want to run all Instants at a point in time. Instants could spawn new instants which
-    // is why recursion is used instead of just take the set of Instants that exist at the
-    // time and processing through those.
-    let rec private runInstants (state: State) =
-        
-        match State.nextInstant state with
-        | Some i ->
-            Instant.handle i state
-            |> runInstants
-        | None ->
-            state
-
-
+    // NOTE: This is where business logic would need to go for prioritizing which allocations
+    // are attempted first. Different procedures likely have some prioritization based on
+    // delivery dates or start times.
     let private prioritizeAllocationRequests (state: State) =
         state.OpenRequests
         // We check that the procedure is still waiting for the allocation. If it is in
@@ -103,11 +91,13 @@ module private Phases =
     // We process all Instants and Allocations at a point in time before proceeding to the
     // next point in time. This is akin to the three-phase approach:
     // https://en.wikipedia.org/wiki/Discrete-event_simulation#Three-Phased_Approach
+    // Instants are treated as a stack. An instant can enqueue additional instants that will
+    // be processed next since they are on top of the stack.
     let rec runImmediatePhase (state: State) =
 
-        match State.nextInstant state with
-        | Some i ->
-            Instant.handle i state
+        match State.popInstant state with
+        | Some (nextInstant, nextState) ->
+            Instant.handle nextInstant nextState
             |> runImmediatePhase
         | None ->
             let newState = runAllocations state
@@ -121,12 +111,12 @@ module private Phases =
     /// This is when we take a step forward in time and process the next Possibility
     let runTimeStepPhase (maxTime: TimeStamp) (state: State) =
         
-        match State.nextPossibility state with
-        | Some possibility ->
+        match State.popPossibility state with
+        | Some (possibility, newState) ->
             if possibility.ArrivalTimeStamp > maxTime then
-                SimulationState.Complete { state with Now = maxTime }
+                SimulationState.Complete { newState with Now = maxTime }
             else
-                state
+                newState
                 |> State.setNow possibility.ArrivalTimeStamp
                 |> Possibility.handle possibility
                 |> SimulationState.Processing

@@ -174,7 +174,7 @@ type State = {
     Assignments : Map<Resource, ProcedureId * AllocationId>
     Procedures : Map<ProcedureId, Procedure>
     Instants : Instant list
-    Possibilities : Set<Possibility>
+    Possibilities : Possibility list
     OpenRequests : Set<AllocationRequest>
     History : Fact list
 }

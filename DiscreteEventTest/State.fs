@@ -17,7 +17,7 @@ let initial =
         Assignments = Map.empty
         Procedures = Map.empty
         Instants = []
-        Possibilities = Set.empty
+        Possibilities = []
         OpenRequests = Set.empty
         History = []
     }
@@ -36,12 +36,12 @@ let addFact (factType: FactType) (state: State) =
     }
 
 
-let addPossibility (delay: Interval) (possibilityType: PossibilityType) (state: State) =
+let enqueuePossibility (delay: Interval) (possibilityType: PossibilityType) (state: State) =
     let nextPossibilityId = PossibilityId.next state.LastPossibilityId
-    let possibility = Possibility.create nextPossibilityId (state.Now + delay) possibilityType
+    let newPossibility = Possibility.create nextPossibilityId (state.Now + delay) possibilityType
     { state with
         LastPossibilityId = nextPossibilityId
-        Possibilities = Set.add possibility state.Possibilities
+        Possibilities = newPossibility::state.Possibilities
     }
     // Note: We do not addFact here because this may or may not happen.
     // Facts are only things that HAVE happened
@@ -56,16 +56,16 @@ module private Initializers =
 
     // This is a separate version for initialization since the State object is not moving forward
     // in time when initializing
-    let private addPossibility (timeStamp: TimeStamp) (possibilityType: PossibilityType) (state: State) =
+    let private enqueuePossibility (timeStamp: TimeStamp) (possibilityType: PossibilityType) (state: State) =
         let nextPossibilityId = PossibilityId.next state.LastPossibilityId
         let newPossibility = Possibility.create nextPossibilityId timeStamp possibilityType
         { state with 
             LastPossibilityId = nextPossibilityId
-            Possibilities = Set.add newPossibility state.Possibilities
+            Possibilities = newPossibility::state.Possibilities
         }
 
 
-    let addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) (modelState: State) : State =
+    let enqueuePossibilities (maxTime: TimeStamp) (generators: seq<Generator>) (modelState: State) : State =
 
         let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (generator: Generator) (state: State) =
             let nextTimeSpan = 
@@ -79,7 +79,7 @@ module private Initializers =
                 state
             else
                 state
-                |> addPossibility nextTime generator.PossibilityType
+                |> enqueuePossibility nextTime generator.PossibilityType
                 |> add nextTime maxTime generator
 
         let modelState =
@@ -98,7 +98,7 @@ module private Initializers =
     let private addScheduledEvent (scheduledEvent: ScheduledEvent) (state: State) =
         match scheduledEvent with
         | StartPlan (plan, arrivalTimeStamp) ->
-            addPossibility arrivalTimeStamp (PossibilityType.PlanArrival plan) state
+            enqueuePossibility arrivalTimeStamp (PossibilityType.PlanArrival plan) state
 
     let addSchedule (Schedule schedule) (state: State) =
             
@@ -110,49 +110,41 @@ let initialize (maxTime: TimeStamp) (model: Model) =
         
     initial
     |> Initializers.addResources (model.Resources)
-    |> Initializers.addPossibilities maxTime model.Generators
+    |> Initializers.enqueuePossibilities maxTime model.Generators
     |> Initializers.addSchedule model.Schedule
 
 
-let nextPossibility (modelState: State) =
-    match modelState.Possibilities.IsEmpty with
-    | true -> None
-    | false -> 
-        modelState.Possibilities
-        // TODO: Better data structure
-        |> Seq.sortBy (fun x -> x.ArrivalTimeStamp, x.PossibilityId)
-        |> Seq.head
-        |> Some
+let popPossibility (state: State) =
+    // TODO: Better data structure
+    let sortedPossibilities = 
+        state.Possibilities
+        |> List.sortBy (fun x -> x.ArrivalTimeStamp, x.PossibilityId)
+
+    match sortedPossibilities with
+    | [] -> None
+    | next::remaining -> 
+        let newState = { state with Possibilities = remaining }
+        Some (next, newState)
 
 
-let nextInstant (state: State) =
-    //match state.Instants.IsEmpty with
-    //| true -> None
-    //| false ->
-    //    state.Instants
-    //    // TODO: Better data structure
-    //    |> Seq.sortBy (fun x -> x.InstantId)
-    //    |> Seq.head
-    //    |> Some
+let popInstant (state: State) =
     match state.Instants with
     | [] -> None
-    | next::_ -> Some next
+    | next::remaining -> 
+        let newState = { state with Instants = remaining }
+        Some (next, newState)
 
 let private setProcedure (procedure: Procedure) (state: State) =
     { state with Procedures = Map.add procedure.ProcedureId procedure state.Procedures }
 
 
-let addInstant instantType (state: State) =
+let enqueueInstant instantType (state: State) =
     let nextInstantId = InstantId.next state.LastInstantId
     let nextInstant = Instant.create nextInstantId instantType
     { state with 
         LastInstantId = nextInstantId
         Instants = nextInstant::state.Instants
     }
-
-
-let removeInstant (i: Instant) (state: State) =
-    { state with Instants = List.where (fun x -> i <> x) state.Instants }
 
 
 let addAllocationRequest (a: AllocationRequest) (state: State) =
@@ -165,10 +157,6 @@ let removeAllocationRequest (a: AllocationRequest) (state: State) =
   |> addFact (FactType.allocationRequestRemoved a)
 
 
-let removePossibility (p: Possibility) (state: State) =
-    { state with Possibilities = Set.remove p state.Possibilities }
-
-
 let startProcedure plan (state: State) =
     let nextProcedureId = ProcedureId.next state.LastProcedureId
     let p = Procedure.ofPlan nextProcedureId plan
@@ -177,7 +165,7 @@ let startProcedure plan (state: State) =
         Procedures = Map.add nextProcedureId p state.Procedures
     }
     |> addFact (FactType.procedureStarted nextProcedureId)
-    |> addInstant (InstantType.proceed nextProcedureId)
+    |> enqueueInstant (InstantType.proceed nextProcedureId)
 
 
 let addAllocation procedureId (a: Allocation) (state: State) =
@@ -210,7 +198,7 @@ let freeAllocation (procedureId: ProcedureId) (allocationId: AllocationId) (stat
         Assignments = Map.removeAll resources state.Assignments 
     }
     |> addFact (FactType.freed procedureId allocationId resources)
-    |> addInstant (InstantType.proceed procedureId)
+    |> enqueueInstant (InstantType.proceed procedureId)
 
 
 let private finishPreviousStep (procedureState: Procedure) (state: State) =
@@ -245,7 +233,7 @@ module private ProcessStep =
             }
         state
         |> setProcedure newProcedure
-        |> addPossibility timeSpan (PossibilityType.Completion completion)
+        |> enqueuePossibility timeSpan (PossibilityType.Completion completion)
     
 
 
@@ -257,12 +245,12 @@ let private processStep (next: Step) (procedure: Procedure) (state: State) =
     | StepType.Delay timeSpan ->
         ProcessStep.delay timeSpan next procedure
     | StepType.FreeAllocation allocationId ->
-        addInstant (InstantType.free procedure.ProcedureId allocationId)
+        enqueueInstant (InstantType.free procedure.ProcedureId allocationId)
     | StepType.Fail resource ->
         //addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
-        addInstant (InstantType.Failure (procedure.ProcedureId, resource))
+        enqueueInstant (InstantType.Failure (procedure.ProcedureId, resource))
     | StepType.Restore resource ->
-        addInstant (InstantType.restore resource)
+        enqueueInstant (InstantType.restore resource)
         
 
 let private startNextStep (procedureState: Procedure) (state: State) =
@@ -293,7 +281,7 @@ let private addHandleFailure resource state =
     match Map.tryFind resource state.Assignments with
     | Some (procedureId, allocationId) ->
         state
-        |> addInstant (InstantType.handleFailure resource procedureId allocationId)
+        |> enqueueInstant (InstantType.handleFailure resource procedureId allocationId)
     | None ->
         state
 
@@ -302,7 +290,7 @@ let private addHandleRestore resource state =
     match Map.tryFind resource state.Assignments with
     | Some (procedureId, allocationId) ->
         state
-        |> addInstant (InstantType.handleRestore resource procedureId allocationId)
+        |> enqueueInstant (InstantType.handleRestore resource procedureId allocationId)
     | None ->
         state
 
@@ -388,7 +376,7 @@ module Possibility =
             
         state
         |> setProcedure newProcedure // TODO: Clean up this wording
-        |> addPossibility newDelay (PossibilityType.Completion newCompletion)
+        |> enqueuePossibility newDelay (PossibilityType.Completion newCompletion)
 
 
     let private whenSuspendedButCannotResume suspendedAt completion newSuspendedFor procedure state =
@@ -426,6 +414,6 @@ let processCompletion (completion: Completion) (state: State) =
     let p = state.Procedures.[completion.ProcedureId]
 
     if p.StateId = completion.StateId then
-        addInstant (InstantType.proceed completion.ProcedureId) state
+        enqueueInstant (InstantType.proceed completion.ProcedureId) state
     else
         state
