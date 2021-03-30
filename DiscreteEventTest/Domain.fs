@@ -16,6 +16,13 @@ module Seq =
         ||> Seq.fold (fun a b -> folder b a)
 
 
+module Map =
+
+    let removeAll keys map =
+        (map, keys)
+        ||> Seq.foldR Map.remove
+
+
 module Distribution =
 
     let sample (distribution: Distribution) =
@@ -36,12 +43,12 @@ module Generator =
 
 module TimeStamp =
 
-    let zero = TimeStamp 0.0
+    let zero = TimeStamp System.TimeSpan.Zero
 
 
 module TimeSpan =
     
-    let zero = TimeSpan 0.0
+    let zero = Interval System.TimeSpan.Zero
 
 
 module AllocationId =
@@ -125,7 +132,7 @@ module InstantId =
 module InstantType =
 
     let free procedureId allocationId =
-        InstantType.Free (procedureId, allocationId)
+        InstantType.FreeAllocation (procedureId, allocationId)
 
     let proceed procedureId =
         InstantType.Proceed procedureId
@@ -155,10 +162,10 @@ module PossibilityId =
         PossibilityId (lastPossibilityId + 1L)
 
 
-module PossibilityType =
+//module PossibilityType =
 
-    let failure procedureId resource =
-        PossibilityType.Failure (procedureId, resource)
+//    let failure procedureId resource =
+//        PossibilityType.Failure (procedureId, resource)
 
 
 module Possibility =
@@ -320,7 +327,7 @@ module Planning =
     type PlanBuilder with
 
         [<CustomOperation("delay", MaintainsVariableSpaceUsingBind=true)>]
-        member this.Delay (st:State<_,PlanAcc>, [<ProjectionParameter>] (duration: 'a -> TimeSpan)) =
+        member this.Delay (st:State<_,PlanAcc>, [<ProjectionParameter>] (duration: 'a -> Interval)) =
             state {
                 let! x = st
                 let d = duration x

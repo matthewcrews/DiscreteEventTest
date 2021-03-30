@@ -10,10 +10,12 @@ module private Instant =
     let handle (instant: Instant) (state: State) =
         state |>
         match instant.InstantType with
-        | InstantType.Free (procedureId, allocationId) -> 
+        | InstantType.FreeAllocation (procedureId, allocationId) -> 
             State.freeAllocation procedureId allocationId
         | InstantType.Proceed procedureId ->
             State.proceed procedureId
+        | InstantType.Failure (procedureId, resource) ->
+            State.failResource procedureId resource
         | InstantType.Restore resource ->
             State.restoreResource resource
         | InstantType.HandleFailure (resource, procedureId, allocationId) ->
@@ -32,8 +34,8 @@ module private Possibility =
             State.processCompletion completion
         | PossibilityType.PlanArrival plan -> 
             State.startProcedure plan
-        | PossibilityType.Failure (procedureId, resource) ->
-            State.failResource procedureId resource
+        //| PossibilityType.Failure (procedureId, resource) ->
+        //    State.failResource procedureId resource
         |> State.removePossibility next
         
 
@@ -110,7 +112,7 @@ module private Phases =
         | None ->
             let newState = runAllocations state
             // If new Instants have spawned, we must process them
-            if not (Set.isEmpty newState.Instants) then
+            if not (List.isEmpty newState.Instants) then
                 runImmediatePhase newState
             else
                 newState

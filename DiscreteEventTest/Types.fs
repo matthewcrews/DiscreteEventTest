@@ -27,20 +27,23 @@ type Model = {
 
 type StateId = StateId of int64
 
-type TimeStamp = TimeStamp of float
+type TimeStamp = TimeStamp of System.TimeSpan
     with
 
     static member (-) (TimeStamp t1, TimeStamp t2) =
-        TimeSpan (t1 - t2)
+        Interval (t1 - t2)
 
-type TimeSpan = TimeSpan of float
+type Interval = Interval of System.TimeSpan
     with
 
-    static member (+) (TimeStamp stamp, TimeSpan span) =
+    static member (+) (TimeStamp stamp, Interval span) =
         TimeStamp (stamp + span)
 
-    static member (+) (span:TimeSpan, stamp:TimeStamp) =
+    static member (+) (span:Interval, stamp:TimeStamp) =
         stamp + span
+
+    static member (+) (Interval i1, Interval i2) =
+        Interval (i1 + i2)
 
 type Resource = Resource of string
 
@@ -55,7 +58,7 @@ type Allocation = {
 [<RequireQualifiedAccess>]
 type StepType =
     | Allocate of allocationId: AllocationId * numberOf: int * resources: Set<Resource>
-    | Delay of timeSpan: TimeSpan
+    | Delay of timeSpan: Interval
     | FreeAllocation of allocationId: AllocationId
     | Fail of resource: Resource
     | Restore of resource: Resource
@@ -93,7 +96,8 @@ type InstantId = InstantId of int64
 
 [<RequireQualifiedAccess>]
 type InstantType =
-    | Free of procedureId: ProcedureId * allocationId: AllocationId
+    | FreeAllocation of procedureId: ProcedureId * allocationId: AllocationId
+    | Failure of procedureId: ProcedureId * resource: Resource
     | Proceed of procedureId: ProcedureId
     | Restore of resource: Resource
     | HandleFailure of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId
@@ -117,7 +121,6 @@ type PossibilityId = PossibilityId of int64
 type PossibilityType = 
     | Completion of completion: Completion
     | PlanArrival of plan: Plan
-    | Failure of procedureId: ProcedureId * resource: Resource
 
 type Possibility =
     {
@@ -170,7 +173,7 @@ type State = {
     Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
     Assignments : Map<Resource, ProcedureId * AllocationId>
     Procedures : Map<ProcedureId, Procedure>
-    Instants : Set<Instant>
+    Instants : Instant list
     Possibilities : Set<Possibility>
     OpenRequests : Set<AllocationRequest>
     History : Fact list

@@ -6,7 +6,7 @@ open Desif.Types
 
 let initial =
     {
-        Now = TimeStamp 0.0
+        Now = TimeStamp.zero
         LastFactId = FactId 0L
         LastPossibilityId = PossibilityId 0L
         LastProcedureId = ProcedureId 0L
@@ -16,7 +16,7 @@ let initial =
         Allocations = Map.empty
         Assignments = Map.empty
         Procedures = Map.empty
-        Instants = Set.empty
+        Instants = []
         Possibilities = Set.empty
         OpenRequests = Set.empty
         History = []
@@ -36,7 +36,7 @@ let addFact (factType: FactType) (state: State) =
     }
 
 
-let addPossibility (delay: TimeSpan) (possibilityType: PossibilityType) (state: State) =
+let addPossibility (delay: Interval) (possibilityType: PossibilityType) (state: State) =
     let nextPossibilityId = PossibilityId.next state.LastPossibilityId
     let possibility = Possibility.create nextPossibilityId (state.Now + delay) possibilityType
     { state with
@@ -68,7 +68,12 @@ module private Initializers =
     let addPossibilities (maxTime: TimeStamp) (generators: seq<Generator>) (modelState: State) : State =
 
         let rec add (lastTime: TimeStamp) (maxTime: TimeStamp) (generator: Generator) (state: State) =
-            let nextTimeSpan = Distribution.sample generator.Distribution |> TimeSpan
+            let nextTimeSpan = 
+                // Yes, this is terrible. It will be refactored
+                Distribution.sample generator.Distribution
+                |> int
+                |> fun x -> System.TimeSpan (0, x, 0)
+                |> Interval
             let nextTime = lastTime + nextTimeSpan
             if nextTime > maxTime then
                 state
@@ -121,15 +126,17 @@ let nextPossibility (modelState: State) =
 
 
 let nextInstant (state: State) =
-    match state.Instants.IsEmpty with
-    | true -> None
-    | false ->
-        state.Instants
-        // TODO: Better data structure
-        |> Seq.sortBy (fun x -> x.InstantId)
-        |> Seq.head
-        |> Some
-
+    //match state.Instants.IsEmpty with
+    //| true -> None
+    //| false ->
+    //    state.Instants
+    //    // TODO: Better data structure
+    //    |> Seq.sortBy (fun x -> x.InstantId)
+    //    |> Seq.head
+    //    |> Some
+    match state.Instants with
+    | [] -> None
+    | next::_ -> Some next
 
 let private setProcedure (procedure: Procedure) (state: State) =
     { state with Procedures = Map.add procedure.ProcedureId procedure state.Procedures }
@@ -140,12 +147,12 @@ let addInstant instantType (state: State) =
     let nextInstant = Instant.create nextInstantId instantType
     { state with 
         LastInstantId = nextInstantId
-        Instants = Set.add nextInstant state.Instants
+        Instants = nextInstant::state.Instants
     }
 
 
 let removeInstant (i: Instant) (state: State) =
-    { state with Instants = Set.remove i state.Instants }
+    { state with Instants = List.where (fun x -> i <> x) state.Instants }
 
 
 let addAllocationRequest (a: AllocationRequest) (state: State) =
@@ -200,6 +207,7 @@ let freeAllocation (procedureId: ProcedureId) (allocationId: AllocationId) (stat
     { state with
         FreeResources = resources + state.FreeResources
         Allocations = Map.remove (procedureId, allocationId) state.Allocations
+        Assignments = Map.removeAll resources state.Assignments 
     }
     |> addFact (FactType.freed procedureId allocationId resources)
     |> addInstant (InstantType.proceed procedureId)
@@ -251,7 +259,8 @@ let private processStep (next: Step) (procedure: Procedure) (state: State) =
     | StepType.FreeAllocation allocationId ->
         addInstant (InstantType.free procedure.ProcedureId allocationId)
     | StepType.Fail resource ->
-        addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
+        //addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
+        addInstant (InstantType.Failure (procedure.ProcedureId, resource))
     | StepType.Restore resource ->
         addInstant (InstantType.restore resource)
         
@@ -312,8 +321,8 @@ let failResource (procedureId: ProcedureId) (resource: Resource) (state: State) 
     state
     |> addResourceToDown resource
     |> addFact (FactType.failed resource)
-    |> addHandleFailure resource
     |> proceed procedureId
+    |> addHandleFailure resource
 
 
 let restoreResource (resource: Resource) (state: State) =
