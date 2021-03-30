@@ -96,7 +96,8 @@ type InstantId = InstantId of int64
 
 [<RequireQualifiedAccess>]
 type InstantType =
-    | Free of procedureId: ProcedureId * allocationId: AllocationId
+    | FreeAllocation of procedureId: ProcedureId * allocationId: AllocationId
+    | Failure of procedureId: ProcedureId * resource: Resource
     | Proceed of procedureId: ProcedureId
     | Restore of resource: Resource
     | HandleFailure of resource: Resource * procedureId: ProcedureId * allocationId: AllocationId
@@ -120,7 +121,6 @@ type PossibilityId = PossibilityId of int64
 type PossibilityType = 
     | Completion of completion: Completion
     | PlanArrival of plan: Plan
-    | Failure of procedureId: ProcedureId * resource: Resource
 
 type Possibility =
     {

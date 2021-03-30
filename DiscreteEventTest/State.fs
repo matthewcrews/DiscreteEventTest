@@ -259,7 +259,8 @@ let private processStep (next: Step) (procedure: Procedure) (state: State) =
     | StepType.FreeAllocation allocationId ->
         addInstant (InstantType.free procedure.ProcedureId allocationId)
     | StepType.Fail resource ->
-        addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
+        //addPossibility TimeSpan.zero (PossibilityType.failure procedure.ProcedureId resource)
+        addInstant (InstantType.Failure (procedure.ProcedureId, resource))
     | StepType.Restore resource ->
         addInstant (InstantType.restore resource)
         
@@ -320,8 +321,8 @@ let failResource (procedureId: ProcedureId) (resource: Resource) (state: State) 
     state
     |> addResourceToDown resource
     |> addFact (FactType.failed resource)
-    |> addHandleFailure resource
     |> proceed procedureId
+    |> addHandleFailure resource
 
 
 let restoreResource (resource: Resource) (state: State) =

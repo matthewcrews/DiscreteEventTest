@@ -132,7 +132,7 @@ module InstantId =
 module InstantType =
 
     let free procedureId allocationId =
-        InstantType.Free (procedureId, allocationId)
+        InstantType.FreeAllocation (procedureId, allocationId)
 
     let proceed procedureId =
         InstantType.Proceed procedureId
@@ -162,10 +162,10 @@ module PossibilityId =
         PossibilityId (lastPossibilityId + 1L)
 
 
-module PossibilityType =
+//module PossibilityType =
 
-    let failure procedureId resource =
-        PossibilityType.Failure (procedureId, resource)
+//    let failure procedureId resource =
+//        PossibilityType.Failure (procedureId, resource)
 
 
 module Possibility =
