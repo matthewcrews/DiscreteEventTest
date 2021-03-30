@@ -13,8 +13,11 @@ type Generator = {
     PossibilityType : PossibilityType
 }
 
+type ScheduledEvent =
+    | StartPlan of plan: Plan * arrivalTimeStamp: TimeStamp
+
 // TODO: Make a better type for this that's better suited
-type Schedule = Schedule of Possibility list
+type Schedule = Schedule of ScheduledEvent list
 
 type Model = {
     Resources : Set<Resource>
@@ -51,9 +54,9 @@ type Allocation = {
 
 [<RequireQualifiedAccess>]
 type StepType =
-    | Allocate of allocationId: AllocationId * quantity: int * resources: Set<Resource>
+    | Allocate of allocationId: AllocationId * numberOf: int * resources: Set<Resource>
     | Delay of timeSpan: TimeSpan
-    | Free of allocationId: AllocationId
+    | FreeAllocation of allocationId: AllocationId
     | Fail of resource: Resource
     | Restore of resource: Resource
     //| Move of item: ItemId * location: Location
@@ -136,8 +139,10 @@ type FactId = FactId of int64
 
 [<RequireQualifiedAccess>]
 type FactType =
-    | Allocated of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
-    | AllocationRequested of allocationRequest:AllocationRequest
+    | AllocationRequestAdded of allocationRequest: AllocationRequest
+    | AllocationRequestRemoved of allocationRequest: AllocationRequest
+    | AllocationAdded of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
+    | AllocationRemoved of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
     | Freed of procedureId:ProcedureId * allocationId:AllocationId * resources:Set<Resource>
     | StepStarted of procedureId:ProcedureId * stateId:StateId * step:Step
     | StepCompleted of procedureId:ProcedureId * stateId:StateId * step:Step
@@ -160,8 +165,8 @@ type State = {
     LastPossibilityId : PossibilityId
     LastProcedureId : ProcedureId
     LastInstantId : InstantId
-    Free : Set<Resource>
-    Down : Set<Resource>
+    FreeResources : Set<Resource>
+    DownResources : Set<Resource>
     Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
     Assignments : Map<Resource, ProcedureId * AllocationId>
     Procedures : Map<ProcedureId, Procedure>

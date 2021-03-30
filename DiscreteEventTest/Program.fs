@@ -35,8 +35,8 @@ let main argv =
         Generators = Set.empty
         Schedule = 
             Schedule [
-                Possibility.create (PossibilityId -10L) TimeStamp.zero (PossibilityType.PlanArrival simplePlan)
-                Possibility.create (PossibilityId -9L) (TimeStamp 2.0) (PossibilityType.PlanArrival failurePlan)
+                ScheduledEvent.StartPlan (simplePlan, TimeStamp.zero)
+                ScheduledEvent.StartPlan (failurePlan, (TimeStamp 2.0))
             ]
     }
     
@@ -46,4 +46,6 @@ let main argv =
     printfn "%A" (List.rev r.History)
 
     Printer.history r
+    printfn "Press ENTER to close..."
+    Console.ReadKey() |> ignore
     0 // return an integer exit code
