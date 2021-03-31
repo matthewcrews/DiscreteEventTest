@@ -2,25 +2,12 @@
 
 open Desif.Types
 
-module List =
-
-    let inline foldR (folder: 'T -> 'State -> 'State) acc elements =
-      (acc, elements)
-      ||> List.fold (fun a b -> folder b a)
-
-
-module Seq =
-
-    let inline foldR (folder: 'T -> 'State -> 'State) acc elements =
-        (acc, elements)
-        ||> Seq.fold (fun a b -> folder b a)
-
 
 module Map =
 
     let removeAll keys map =
-        (map, keys)
-        ||> Seq.foldR Map.remove
+        (keys, map)
+        ||> Seq.foldBack Map.remove
 
 
 module Distribution =

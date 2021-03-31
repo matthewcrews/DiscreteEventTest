@@ -2,6 +2,16 @@
 
 open Desif.Types
 
+[<RequireQualifiedAccess>]
+type AllocationResult =
+    | Success of state: State
+    | Failure of allocationRequest: AllocationRequest
+
+[<RequireQualifiedAccess>]
+type SimulationState =
+    | Complete of state: State
+    | Processing of state: State
+
 /// NOTE: We do not report Facts in this section. That is all handled by the State module.
 /// This is reserved for "business logic"
 

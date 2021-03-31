@@ -1,4 +1,4 @@
-﻿module rec Desif.Types
+﻿namespace rec Desif.Types
 
 
 type Distribution =
@@ -162,29 +162,4 @@ type Fact = {
     FactType : FactType
 }
 
-type State = {
-    Now : TimeStamp
-    LastFactId : FactId
-    LastPossibilityId : PossibilityId
-    LastProcedureId : ProcedureId
-    LastInstantId : InstantId
-    FreeResources : Set<Resource>
-    DownResources : Set<Resource>
-    Allocations : Map<ProcedureId * AllocationId, Set<Resource>>
-    Assignments : Map<Resource, ProcedureId * AllocationId>
-    Procedures : Map<ProcedureId, Procedure>
-    Instants : Instant list
-    Possibilities : Possibility list
-    OpenRequests : Set<AllocationRequest>
-    History : Fact list
-}
 
-[<RequireQualifiedAccess>]
-type AllocationResult =
-    | Success of state: State
-    | Failure of allocationRequest: AllocationRequest
-
-[<RequireQualifiedAccess>]
-type SimulationState =
-    | Complete of state: State
-    | Processing of state: State
