@@ -161,5 +161,3 @@ type Fact = {
     TimeStamp : TimeStamp
     FactType : FactType
 }
-
-

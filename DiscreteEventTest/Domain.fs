@@ -89,6 +89,12 @@ module ProcedureState =
         ProcedureState.Suspended (suspendedAt, remainingTime, suspendedFor)
 
 
+module StateId =
+
+    let next (StateId stateId) =
+        StateId (stateId + 1L)
+
+
 module Procedure =
     
     let create procedureId stateId pending processed procedureState =
@@ -103,11 +109,40 @@ module Procedure =
     let ofPlan procedureId (Plan steps) =
         create procedureId (StateId 0L) steps [] ProcedureState.running
 
+    let changeToWaitingFor (now: TimeStamp) (waitingFor: Completion) (resources: Set<Resource>) (procedure: Procedure) =
+        let nextStateId = StateId.next procedure.StateId
+        let newProcedureState = ProcedureState.Suspended (now, waitingFor, resources)
+        { procedure with
+            StateId = nextStateId
+            ProcedureState = newProcedureState 
+        }
 
-module StateId =
+    let changeToSuspended (suspendedAt: TimeStamp) (waitingFor: Completion) (suspendedFor: Set<Resource>) (procedure: Procedure) =
+        let newProcedureState = ProcedureState.Suspended (suspendedAt, waitingFor, suspendedFor)
+        let nextStateId = StateId.next procedure.StateId
+        { procedure with
+            StateId = nextStateId
+            ProcedureState = newProcedureState 
+        }
 
-    let next (StateId stateId) =
-        StateId (stateId + 1L)
+
+module Completion =
+
+    let create (completionTimeStamp: TimeStamp) (next: Step) (procedure: Procedure) =
+        let nextStateId = StateId.next procedure.StateId
+        let completion =
+            {
+                ProcedureId = procedure.ProcedureId
+                StateId = nextStateId
+                StepId = next.StepId
+                CompletionTimeStamp = completionTimeStamp
+            }
+        let newProcedure = 
+            { procedure with 
+                StateId = nextStateId
+                ProcedureState = ProcedureState.waiting completion 
+            }
+        completion, newProcedure
 
         
 module InstantId =
